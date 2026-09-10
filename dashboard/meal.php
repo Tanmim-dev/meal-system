@@ -1,51 +1,46 @@
 <?php
-session_start();
 
+session_start();
 require_once "../config/database.php";
 
-
-/* =================================================
-   CHECK LOGIN
-================================================= */
+// --------------------------------------------------
+// CHECK LOGIN
+// --------------------------------------------------
 
 if (!isset($_SESSION["user_id"])) {
-
     header("Location: ../login.php");
     exit;
 }
 
-
-/* =================================================
-   CHECK MEAL ID
-================================================= */
-
-if (!isset($_GET["id"]) || !is_numeric($_GET["id"])) {
-
-    die("Invalid meal group.");
-}
-
-
-$meal_id = (int) $_GET["id"];
 $user_id = $_SESSION["user_id"];
 
 
-/* =================================================
-   GET MEAL + CURRENT USER ROLE
-================================================= */
+// --------------------------------------------------
+// CHECK MEAL ID
+// --------------------------------------------------
+
+if (!isset($_GET["id"]) || !is_numeric($_GET["id"])) {
+    die("Invalid meal group.");
+}
+
+$meal_id = (int) $_GET["id"];
+
+
+// --------------------------------------------------
+// GET MEAL GROUP + CURRENT USER ROLE
+// --------------------------------------------------
 
 $stmt = $pdo->prepare("
     SELECT
         mg.id,
         mg.name,
-        mg.join_code,
         mg.month_name,
         mg.year,
+        mg.join_code,
         mm.role
     FROM meal_groups mg
-
     INNER JOIN meal_members mm
         ON mg.id = mm.meal_group_id
-
     WHERE mg.id = ?
       AND mm.user_id = ?
 ");
@@ -57,56 +52,46 @@ $stmt->execute([
 
 $meal = $stmt->fetch(PDO::FETCH_ASSOC);
 
-
 if (!$meal) {
-
-    die("You are not a member of this meal.");
+    die("You are not a member of this meal group.");
 }
-
 
 $current_role = $meal["role"];
 
 
-/*
-    Manager + Junior Manager
-    can create/edit announcements.
+// --------------------------------------------------
+// PERMISSIONS
+// --------------------------------------------------
 
-    Manager only
-    can delete announcements.
-*/
-
-$can_announcement_edit =
+// Manager + Junior Manager can add/edit announcements
+$can_edit_announcement =
     ($current_role === "manager" ||
      $current_role === "junior_manager");
 
-$can_announcement_delete =
+// Manager only can delete announcements
+$can_delete_announcement =
     ($current_role === "manager");
 
 
-/* =================================================
-   ADD ANNOUNCEMENT
-================================================= */
+// --------------------------------------------------
+// ADD ANNOUNCEMENT
+// --------------------------------------------------
 
 if (
-    $_SERVER["REQUEST_METHOD"] === "POST"
-    && isset($_POST["add_announcement"])
+    $_SERVER["REQUEST_METHOD"] === "POST" &&
+    isset($_POST["add_announcement"])
 ) {
 
-    if (!$can_announcement_edit) {
-
+    if (!$can_edit_announcement) {
         die("You do not have permission to add announcements.");
     }
-
 
     $title = trim($_POST["title"] ?? "");
     $message = trim($_POST["message"] ?? "");
 
-
     if ($title === "" || $message === "") {
-
-        die("Please fill in the announcement title and message.");
+        die("Please fill in all announcement fields.");
     }
-
 
     $stmt = $pdo->prepare("
         INSERT INTO announcements
@@ -119,7 +104,6 @@ if (
         VALUES (?, ?, ?, ?)
     ");
 
-
     $stmt->execute([
         $meal_id,
         $title,
@@ -127,29 +111,26 @@ if (
         $user_id
     ]);
 
-
     header("Location: meal.php?id=" . $meal_id);
     exit;
 }
 
 
-/* =================================================
-   EDIT ANNOUNCEMENT
-================================================= */
+// --------------------------------------------------
+// EDIT ANNOUNCEMENT
+// --------------------------------------------------
 
 if (
-    $_SERVER["REQUEST_METHOD"] === "POST"
-    && isset($_POST["edit_announcement"])
+    $_SERVER["REQUEST_METHOD"] === "POST" &&
+    isset($_POST["edit_announcement"])
 ) {
 
-    if (!$can_announcement_edit) {
-
+    if (!$can_edit_announcement) {
         die("You do not have permission to edit announcements.");
     }
 
-
     $announcement_id =
-        (int)($_POST["announcement_id"] ?? 0);
+        (int) ($_POST["announcement_id"] ?? 0);
 
     $title =
         trim($_POST["title"] ?? "");
@@ -157,33 +138,22 @@ if (
     $message =
         trim($_POST["message"] ?? "");
 
-
     if (
         $announcement_id <= 0 ||
         $title === "" ||
         $message === ""
     ) {
-
         die("Please fill in all announcement fields.");
     }
 
-
-    /*
-        Make sure this announcement
-        belongs to this meal group.
-    */
-
     $stmt = $pdo->prepare("
         UPDATE announcements
-
         SET
             title = ?,
             message = ?
-
         WHERE id = ?
           AND meal_group_id = ?
     ");
-
 
     $stmt->execute([
         $title,
@@ -192,53 +162,46 @@ if (
         $meal_id
     ]);
 
-
     header("Location: meal.php?id=" . $meal_id);
     exit;
 }
 
 
-/* =================================================
-   DELETE ANNOUNCEMENT
-================================================= */
+// --------------------------------------------------
+// DELETE ANNOUNCEMENT
+// --------------------------------------------------
 
 if (
-    $_SERVER["REQUEST_METHOD"] === "POST"
-    && isset($_POST["delete_announcement"])
+    $_SERVER["REQUEST_METHOD"] === "POST" &&
+    isset($_POST["delete_announcement"])
 ) {
 
-    if (!$can_announcement_delete) {
-
+    if (!$can_delete_announcement) {
         die("Only the Manager can delete announcements.");
     }
 
-
     $announcement_id =
-        (int)($_POST["announcement_id"] ?? 0);
-
+        (int) ($_POST["announcement_id"] ?? 0);
 
     $stmt = $pdo->prepare("
         DELETE FROM announcements
-
         WHERE id = ?
           AND meal_group_id = ?
     ");
-
 
     $stmt->execute([
         $announcement_id,
         $meal_id
     ]);
 
-
     header("Location: meal.php?id=" . $meal_id);
     exit;
 }
 
 
-/* =================================================
-   GET ALL MEMBERS
-================================================= */
+// --------------------------------------------------
+// GET ALL MEMBERS
+// --------------------------------------------------
 
 $stmt = $pdo->prepare("
     SELECT
@@ -246,28 +209,16 @@ $stmt = $pdo->prepare("
         u.name,
         u.email,
         mm.role
-
     FROM meal_members mm
-
     INNER JOIN users u
         ON mm.user_id = u.id
-
     WHERE mm.meal_group_id = ?
-
     ORDER BY
-
-        CASE
-
-            WHEN mm.role = 'manager'
-                THEN 1
-
-            WHEN mm.role = 'junior_manager'
-                THEN 2
-
-            ELSE 3
-
+        CASE mm.role
+            WHEN 'manager' THEN 1
+            WHEN 'junior_manager' THEN 2
+            WHEN 'member' THEN 3
         END,
-
         u.name
 ");
 
@@ -278,9 +229,9 @@ $stmt->execute([
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-/* =================================================
-   GET ANNOUNCEMENTS
-================================================= */
+// --------------------------------------------------
+// GET ANNOUNCEMENTS
+// --------------------------------------------------
 
 $stmt = $pdo->prepare("
     SELECT
@@ -290,15 +241,13 @@ $stmt = $pdo->prepare("
         a.created_by,
         a.created_at,
         u.name AS creator_name
-
     FROM announcements a
-
     INNER JOIN users u
         ON a.created_by = u.id
-
     WHERE a.meal_group_id = ?
-
-    ORDER BY a.created_at DESC, a.id DESC
+    ORDER BY
+        a.created_at DESC,
+        a.id DESC
 ");
 
 $stmt->execute([
@@ -315,758 +264,22 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <head>
 
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-
-    <?php echo htmlspecialchars($meal["name"]); ?>
-
-    - Meal System
-
-</title>
-
-
-<style>
-
-/* =================================================
-   RESET
-================================================= */
-
-* {
-
-    box-sizing: border-box;
-
-    margin: 0;
-
-    padding: 0;
-}
-
-
-/* =================================================
-   BODY
-================================================= */
-
-body {
-
-    font-family: Arial, sans-serif;
-
-    background: #f5f6fa;
-
-    color: #222;
-}
-
-
-/* =================================================
-   MAIN LAYOUT
-================================================= */
-
-.app-container {
-
-    display: flex;
-
-    min-height: 100vh;
-}
-
-
-/* =================================================
-   SIDEBAR
-================================================= */
-
-.sidebar {
-
-    width: 250px;
-
-    background: #ffffff;
-
-    border-right: 1px solid #e5e5e5;
-
-    padding: 25px 15px;
-
-    position: fixed;
-
-    top: 0;
-
-    left: 0;
-
-    bottom: 0;
-
-    display: flex;
-
-    flex-direction: column;
-}
-
-
-.logo {
-
-    font-size: 23px;
-
-    font-weight: bold;
-
-    color: #6c4ce8;
-
-    padding: 0 15px 30px;
-}
-
-
-.sidebar-title {
-
-    font-size: 12px;
-
-    color: #999;
-
-    text-transform: uppercase;
-
-    padding: 0 15px 10px;
-
-    letter-spacing: 1px;
-}
-
-
-.nav-menu {
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 6px;
-}
-
-
-.nav-button {
-
-    text-decoration: none;
-
-    color: #444;
-
-    padding: 13px 15px;
-
-    border-radius: 10px;
-
-    font-size: 15px;
-
-    display: block;
-
-    transition: 0.2s;
-}
-
-
-.nav-button:hover {
-
-    background: #f1edff;
-
-    color: #6c4ce8;
-}
-
-
-.nav-button.active {
-
-    background: #6c4ce8;
-
-    color: white;
-}
-
-
-.sidebar-bottom {
-
-    margin-top: auto;
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 6px;
-}
-
-
-.logout-button {
-
-    color: #d33;
-}
-
-
-.logout-button:hover {
-
-    background: #fff0f0;
-
-    color: #c22;
-}
-
-
-/* =================================================
-   MAIN CONTENT
-================================================= */
-
-.main-content {
-
-    margin-left: 250px;
-
-    width: calc(100% - 250px);
-
-    padding: 35px;
-}
-
-
-/* =================================================
-   TOP BAR
-================================================= */
-
-.top-bar {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    margin-bottom: 25px;
-}
-
-
-.top-bar h1 {
-
-    font-size: 28px;
-}
-
-
-.user-badge {
-
-    background: white;
-
-    padding: 10px 15px;
-
-    border-radius: 10px;
-
-    border: 1px solid #e5e5e5;
-
-    font-size: 14px;
-}
-
-
-/* =================================================
-   MEAL INFO
-================================================= */
-
-.meal-info {
-
-    background: white;
-
-    border-radius: 15px;
-
-    padding: 25px;
-
-    margin-bottom: 25px;
-
-    border: 1px solid #e5e5e5;
-}
-
-
-.meal-info h2 {
-
-    margin-bottom: 15px;
-
-    font-size: 24px;
-}
-
-
-.info-grid {
-
-    display: flex;
-
-    flex-wrap: wrap;
-
-    gap: 25px;
-}
-
-
-.info-item {
-
-    font-size: 14px;
-
-    color: #666;
-}
-
-
-.info-item strong {
-
-    color: #222;
-}
-
-
-.join-code {
-
-    color: #6c4ce8;
-
-    font-weight: bold;
-}
-
-
-/* =================================================
-   ANNOUNCEMENTS
-================================================= */
-
-.announcement-card {
-
-    background: white;
-
-    border-radius: 15px;
-
-    padding: 25px;
-
-    border: 1px solid #e5e5e5;
-
-    margin-bottom: 25px;
-}
-
-
-.section-header {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    margin-bottom: 20px;
-}
-
-
-.section-header h2 {
-
-    font-size: 21px;
-}
-
-
-.add-button {
-
-    background: #6c4ce8;
-
-    color: white;
-
-    border: none;
-
-    text-decoration: none;
-
-    padding: 9px 15px;
-
-    border-radius: 8px;
-
-    font-size: 14px;
-
-    cursor: pointer;
-}
-
-
-.add-button:hover {
-
-    background: #5938d0;
-}
-
-
-/* =================================================
-   ANNOUNCEMENT FORM
-================================================= */
-
-.announcement-form {
-
-    background: #faf9ff;
-
-    border: 1px solid #e7e2ff;
-
-    border-radius: 12px;
-
-    padding: 18px;
-
-    margin-bottom: 20px;
-}
-
-
-.form-group {
-
-    margin-bottom: 15px;
-}
-
-
-.form-group label {
-
-    display: block;
-
-    font-size: 13px;
-
-    color: #666;
-
-    margin-bottom: 6px;
-}
-
-
-.form-group input,
-.form-group textarea {
-
-    width: 100%;
-
-    padding: 11px;
-
-    border: 1px solid #ddd;
-
-    border-radius: 8px;
-
-    font-family: Arial, sans-serif;
-
-    font-size: 14px;
-}
-
-
-.form-group textarea {
-
-    min-height: 100px;
-
-    resize: vertical;
-}
-
-
-.form-actions {
-
-    display: flex;
-
-    gap: 8px;
-}
-
-
-.save-button {
-
-    background: #6c4ce8;
-
-    color: white;
-
-    border: none;
-
-    padding: 10px 18px;
-
-    border-radius: 8px;
-
-    cursor: pointer;
-}
-
-
-.cancel-button {
-
-    background: #eee;
-
-    color: #444;
-
-    border: none;
-
-    padding: 10px 18px;
-
-    border-radius: 8px;
-
-    cursor: pointer;
-}
-
-
-/* =================================================
-   ANNOUNCEMENT ITEM
-================================================= */
-
-.announcement {
-
-    border: 1px solid #eee;
-
-    border-radius: 10px;
-
-    padding: 18px;
-
-    margin-bottom: 12px;
-
-    background: #fff;
-}
-
-
-.announcement:last-child {
-
-    margin-bottom: 0;
-}
-
-
-.announcement-title {
-
-    font-weight: bold;
-
-    font-size: 17px;
-
-    margin-bottom: 8px;
-}
-
-
-.announcement-message {
-
-    white-space: pre-wrap;
-
-    line-height: 1.6;
-
-    color: #444;
-
-    margin-bottom: 12px;
-}
-
-
-.announcement-meta {
-
-    font-size: 13px;
-
-    color: #888;
-}
-
-
-.announcement-actions {
-
-    margin-top: 12px;
-
-    display: flex;
-
-    gap: 8px;
-
-    flex-wrap: wrap;
-}
-
-
-.edit-button {
-
-    background: #ede9fe;
-
-    color: #6c4ce8;
-
-    border: none;
-
-    padding: 7px 12px;
-
-    border-radius: 7px;
-
-    cursor: pointer;
-
-    font-size: 12px;
-}
-
-
-.delete-button {
-
-    background: #fee2e2;
-
-    color: #dc2626;
-
-    border: none;
-
-    padding: 7px 12px;
-
-    border-radius: 7px;
-
-    cursor: pointer;
-
-    font-size: 12px;
-}
-
-
-/* =================================================
-   EMPTY ANNOUNCEMENT
-================================================= */
-
-.no-announcement {
-
-    border: 1px solid #eee;
-
-    border-radius: 10px;
-
-    padding: 20px;
-
-    text-align: center;
-
-    color: #888;
-}
-
-
-/* =================================================
-   MEMBER SECTION
-================================================= */
-
-.members-card {
-
-    background: white;
-
-    border-radius: 15px;
-
-    padding: 25px;
-
-    border: 1px solid #e5e5e5;
-}
-
-
-.members-table-wrapper {
-
-    overflow-x: auto;
-}
-
-
-table {
-
-    width: 100%;
-
-    border-collapse: collapse;
-
-    margin-top: 15px;
-}
-
-
-th,
-td {
-
-    text-align: left;
-
-    padding: 13px;
-
-    border-bottom: 1px solid #eee;
-}
-
-
-th {
-
-    font-size: 13px;
-
-    color: #666;
-}
-
-
-td {
-
-    font-size: 14px;
-}
-
-
-.role-manager {
-
-    color: #6c4ce8;
-
-    font-weight: bold;
-}
-
-
-.role-junior {
-
-    color: #2878d7;
-
-    font-weight: bold;
-}
-
-
-.role-member {
-
-    color: #555;
-}
-
-
-.action-link {
-
-    font-size: 13px;
-
-    line-height: 2;
-}
-
-
-.back-dashboard {
-
-    display: inline-block;
-
-    margin-top: 25px;
-
-    text-decoration: none;
-
-    color: #6c4ce8;
-}
-
-
-/* =================================================
-   MOBILE
-================================================= */
-
-@media (max-width: 768px) {
-
-    .sidebar {
-
-        position: static;
-
-        width: 100%;
-
-        height: auto;
-
-        border-right: none;
-
-        border-bottom: 1px solid #e5e5e5;
-    }
-
-
-    .app-container {
-
-        display: block;
-    }
-
-
-    .main-content {
-
-        margin-left: 0;
-
-        width: 100%;
-
-        padding: 20px;
-    }
-
-
-    .nav-menu {
-
-        display: grid;
-
-        grid-template-columns: 1fr 1fr;
-    }
-
-
-    .sidebar-bottom {
-
-        margin-top: 20px;
-    }
-
-
-    .top-bar {
-
-        align-items: flex-start;
-
-        gap: 15px;
-
-        flex-direction: column;
-    }
-
-
-    .info-grid {
-
-        flex-direction: column;
-
-        gap: 10px;
-    }
-
-
-    .section-header {
-
-        align-items: flex-start;
-
-        gap: 15px;
-
-        flex-direction: column;
-    }
-
-}
-
-</style>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Overview - <?php echo htmlspecialchars($meal["name"]); ?>
+    </title>
+
+    <!-- SAME GLOBAL DESIGN AS MARKET + PAYMENTS -->
+    <link
+        rel="stylesheet"
+        href="../css/style.css"
+    >
 
 </head>
 
@@ -1074,151 +287,195 @@ td {
 <body>
 
 
-<div class="app-container">
-
-
-<!-- =================================================
+<!-- ==================================================
      SIDEBAR
-================================================= -->
+================================================== -->
 
-<aside class="sidebar">
-
-
-    <div>
-
-        <div class="logo">
-
-            🍚 Meal System
-
-        </div>
+<div class="sidebar">
 
 
-        <div class="sidebar-title">
+    <!-- LOGO -->
 
-            Meal Menu
+    <div class="logo">
 
-        </div>
+        🍚 Meal System
+
+    </div>
 
 
-        <nav class="nav-menu">
+    <!-- GROUP NAME -->
+
+    <div class="nav-title">
+
+        <?php echo htmlspecialchars($meal["name"]); ?>
+
+    </div>
 
 
-            <a
-                href="meal.php?id=<?php echo $meal_id; ?>"
-                class="nav-button active"
-            >
+    <!-- OVERVIEW -->
+
+    <a
+        href="meal.php?id=<?php echo $meal_id; ?>"
+        class="nav-link active"
+    >
+
+        🏠 Overview
+
+    </a>
+
+
+    <!-- DAILY MEALS -->
+
+    <a
+        href="daily_meals.php?id=<?php echo $meal_id; ?>"
+        class="nav-link"
+    >
+
+        🍽️ Daily Meals
+
+    </a>
+
+
+    <!-- MARKET -->
+
+    <a
+        href="market.php?id=<?php echo $meal_id; ?>"
+        class="nav-link"
+    >
+
+        🛒 Market / Bazar
+
+    </a>
+
+
+    <!-- GIVEN MONEY -->
+
+    <a
+        href="payments.php?id=<?php echo $meal_id; ?>"
+        class="nav-link"
+    >
+
+        💰 Given Money
+
+    </a>
+
+
+    <!-- CALCULATION -->
+
+    <a
+        href="calculation.php?id=<?php echo $meal_id; ?>"
+        class="nav-link"
+    >
+
+        🧮 Calculation
+
+    </a>
+
+
+    <!-- GROUP SECTION -->
+
+    <div class="nav-title">
+
+        Group
+
+    </div>
+
+
+    <!-- MEMBERS -->
+
+    <a
+        href="#members"
+        class="nav-link"
+    >
+
+        👥 Members
+
+    </a>
+
+
+    <!-- MY GROUPS -->
+
+    <a
+        href="index.php"
+        class="nav-link"
+    >
+
+        📋 My Groups
+
+    </a>
+
+
+    <!-- LOGOUT -->
+
+    <a
+        href="../logout.php"
+        class="nav-link"
+    >
+
+        🚪 Logout
+
+    </a>
+
+
+</div>
+
+
+
+<!-- ==================================================
+     MAIN
+================================================== -->
+
+<div class="main">
+
+
+    <!-- ==================================================
+         TOPBAR
+    ================================================== -->
+
+    <div class="topbar">
+
+
+        <div>
+
+            <h1>
+
                 🏠 Overview
-            </a>
+
+            </h1>
+
+        </div>
 
 
-            <a
-                href="daily_meals.php?id=<?php echo $meal_id; ?>"
-                class="nav-button"
-            >
-                🍚 Daily Meals
-            </a>
-
-
-            <a
-                href="market.php?id=<?php echo $meal_id; ?>"
-                class="nav-button"
-            >
-                🛒 Market / Bazar
-            </a>
-
-
-            <a
-                href="payments.php?id=<?php echo $meal_id; ?>"
-                class="nav-button"
-            >
-                💰 Given Money
-            </a>
-
-
-            <a
-                href="calculation.php?id=<?php echo $meal_id; ?>"
-                class="nav-button"
-            >
-                🧮 Calculation
-            </a>
-
-
-        </nav>
-
-    </div>
-
-
-    <div class="sidebar-bottom">
-
-
-        <a
-            href="#members"
-            class="nav-button"
-        >
-            👥 Members
-        </a>
-
-
-        <a
-            href="index.php"
-            class="nav-button"
-        >
-            🏠 Dashboard
-        </a>
-
-
-        <a
-            href="../logout.php"
-            class="nav-button logout-button"
-        >
-            🚪 Logout
-        </a>
-
-
-    </div>
-
-
-</aside>
-
-
-<!-- =================================================
-     MAIN CONTENT
-================================================= -->
-
-<main class="main-content">
-
-
-    <!-- TOP BAR -->
-
-    <div class="top-bar">
-
-
-        <h1>
-
-            <?php echo htmlspecialchars($meal["name"]); ?>
-
-        </h1>
-
-
-        <div class="user-badge">
-
-            👤
+        <div class="user">
 
             <?php echo htmlspecialchars(
                 $_SESSION["user_name"]
             ); ?>
 
+            <span>
+                (
+                <?php echo ucfirst(
+                    str_replace(
+                        "_",
+                        " ",
+                        $current_role
+                    )
+                ); ?>
+                )
+            </span>
+
         </div>
 
 
     </div>
 
 
-    <!-- =================================================
-         MEAL INFORMATION
-    ================================================= -->
 
-    <section class="meal-info">
+    <!-- ==================================================
+         GROUP INFORMATION
+    ================================================== -->
+
+    <div class="card">
 
 
         <h2>
@@ -1230,46 +487,81 @@ td {
         </h2>
 
 
-        <div class="info-grid">
+        <div class="group-info">
 
 
-            <div class="info-item">
+            <div>
 
-                <strong>Period:</strong>
+                <strong>
+                    Period
+                </strong>
 
-                <?php echo htmlspecialchars(
+                <br>
+
+                <?php
+                echo htmlspecialchars(
                     $meal["month_name"]
-                ); ?>
+                );
 
-                <?php echo htmlspecialchars(
+                echo " ";
+
+                echo htmlspecialchars(
                     $meal["year"]
-                ); ?>
+                );
+                ?>
 
             </div>
 
 
-            <div class="info-item">
+            <div>
 
-                <strong>Your Role:</strong>
+                <strong>
+                    Join Code
+                </strong>
 
-                <?php echo htmlspecialchars(
-                    $meal["role"]
-                ); ?>
+                <br>
 
-            </div>
-
-
-            <div class="info-item">
-
-                <strong>Join Code:</strong>
-
-                <span class="join-code">
+                <strong
+                    style="color:#7c3aed;"
+                >
 
                     <?php echo htmlspecialchars(
                         $meal["join_code"]
                     ); ?>
 
-                </span>
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <strong>
+                    Your Role
+                </strong>
+
+                <br>
+
+                <?php echo ucfirst(
+                    str_replace(
+                        "_",
+                        " ",
+                        $current_role
+                    )
+                ); ?>
+
+            </div>
+
+
+            <div>
+
+                <strong>
+                    Members
+                </strong>
+
+                <br>
+
+                <?php echo count($members); ?>
 
             </div>
 
@@ -1277,39 +569,53 @@ td {
         </div>
 
 
-    </section>
+    </div>
 
 
-    <!-- =================================================
+
+    <!-- ==================================================
          ANNOUNCEMENTS
-    ================================================= -->
+    ================================================== -->
 
-    <section class="announcement-card">
-
-
-        <div class="section-header">
+    <div class="card">
 
 
-            <h2>
-
-                📢 Announcements
-
-            </h2>
+        <div class="topbar">
 
 
-            <?php if ($can_announcement_edit): ?>
+            <div>
 
+                <h2>
+
+                    📢 Announcements
+
+                </h2>
+
+                <p
+                    style="
+                        margin:5px 0 0;
+                        color:#777;
+                    "
+                >
+
+                    Important messages for this meal group.
+
+                </p>
+
+            </div>
+
+
+            <?php if ($can_edit_announcement): ?>
 
                 <button
                     type="button"
-                    class="add-button"
-                    onclick="showAnnouncementForm()"
+                    class="add-btn"
+                    onclick="toggleAnnouncementForm()"
                 >
 
                     + Add Announcement
 
                 </button>
-
 
             <?php endif; ?>
 
@@ -1317,104 +623,100 @@ td {
         </div>
 
 
-        <!-- ADD FORM -->
 
-        <?php if ($can_announcement_edit): ?>
+        <!-- ==================================================
+             ADD ANNOUNCEMENT FORM
+        ================================================== -->
 
-
-        <div
-            id="announcementForm"
-            class="announcement-form"
-            style="display:none;"
-        >
+        <?php if ($can_edit_announcement): ?>
 
 
-            <h3 style="margin-bottom:15px;">
-
-                Create Announcement
-
-            </h3>
-
-
-            <form method="POST">
+            <div
+                id="announcementForm"
+                style="display:none;"
+            >
 
 
-                <div class="form-group">
-
-                    <label>
-
-                        Title
-
-                    </label>
-
-
-                    <input
-                        type="text"
-                        name="title"
-                        placeholder="Example: Market payment reminder"
-                        maxlength="255"
-                        required
-                    >
-
-                </div>
+                <form
+                    method="POST"
+                    class="card"
+                    style="
+                        background:#fafafa;
+                        margin-top:20px;
+                    "
+                >
 
 
-                <div class="form-group">
+                    <h3>
 
-                    <label>
+                        Create Announcement
 
-                        Message
-
-                    </label>
+                    </h3>
 
 
-                    <textarea
-                        name="message"
-                        placeholder="Write your announcement..."
-                        required
-                    ></textarea>
-
-                </div>
+                    <div class="form-grid">
 
 
-                <div class="form-actions">
+                        <div class="form-group">
+
+                            <label>
+                                Title
+                            </label>
+
+                            <input
+                                type="text"
+                                name="title"
+                                placeholder="Announcement title"
+                                maxlength="255"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label>
+                                Message
+                            </label>
+
+                            <textarea
+                                name="message"
+                                rows="4"
+                                placeholder="Write your announcement..."
+                                required
+                            ></textarea>
+
+                        </div>
+
+
+                    </div>
 
 
                     <button
                         type="submit"
                         name="add_announcement"
-                        class="save-button"
+                        class="add-btn"
                     >
 
-                        Publish Announcement
+                        📢 Publish Announcement
 
                     </button>
 
 
-                    <button
-                        type="button"
-                        class="cancel-button"
-                        onclick="hideAnnouncementForm()"
-                    >
-
-                        Cancel
-
-                    </button>
+                </form>
 
 
-                </div>
-
-
-            </form>
-
-
-        </div>
+            </div>
 
 
         <?php endif; ?>
 
 
-        <!-- ANNOUNCEMENT LIST -->
+
+        <!-- ==================================================
+             ANNOUNCEMENT LIST
+        ================================================== -->
 
         <?php if (count($announcements) > 0): ?>
 
@@ -1422,185 +724,244 @@ td {
             <?php foreach ($announcements as $announcement): ?>
 
 
-            <div class="announcement">
-
-
-                <div class="announcement-title">
-
-                    📢
-
-                    <?php echo htmlspecialchars(
-                        $announcement["title"]
-                    ); ?>
-
-                </div>
-
-
-                <div class="announcement-message">
-
-                    <?php echo htmlspecialchars(
-                        $announcement["message"]
-                    ); ?>
-
-                </div>
-
-
-                <div class="announcement-meta">
-
-                    Posted by
-
-                    <strong>
-
-                        <?php echo htmlspecialchars(
-                            $announcement["creator_name"]
-                        ); ?>
-
-                    </strong>
-
-
-                    •
-
-
-                    <?php echo date(
-                        "d M Y, h:i A",
-                        strtotime(
-                            $announcement["created_at"]
-                        )
-                    ); ?>
-
-                </div>
-
-
-                <!-- ACTIONS -->
-
-                <?php if ($can_announcement_edit): ?>
-
-
-                <div class="announcement-actions">
-
-
-                    <!-- EDIT -->
-
-                    <details>
-
-                        <summary class="edit-button">
-
-                            ✏️ Edit
-
-                        </summary>
-
-
-                        <form
-                            method="POST"
-                            style="
-                                margin-top:12px;
-                                background:#fafafa;
-                                padding:15px;
-                                border-radius:10px;
-                            "
-                        >
-
-
-                            <input
-                                type="hidden"
-                                name="announcement_id"
-                                value="<?php echo $announcement["id"]; ?>"
-                            >
-
-
-                            <div class="form-group">
-
-                                <label>
-
-                                    Title
-
-                                </label>
-
-
-                                <input
-                                    type="text"
-                                    name="title"
-                                    value="<?php echo htmlspecialchars(
-                                        $announcement["title"]
-                                    ); ?>"
-                                    maxlength="255"
-                                    required
-                                >
-
-                            </div>
-
-
-                            <div class="form-group">
-
-                                <label>
-
-                                    Message
-
-                                </label>
-
-
-                                <textarea
-                                    name="message"
-                                    required
-                                ><?php echo htmlspecialchars(
-                                    $announcement["message"]
-                                ); ?></textarea>
-
-                            </div>
-
-
-                            <button
-                                type="submit"
-                                name="edit_announcement"
-                                class="save-button"
-                            >
-
-                                Save Changes
-
-                            </button>
-
-
-                        </form>
-
-
-                    </details>
-
-
-                    <!-- DELETE -->
-
-                    <?php if ($can_announcement_delete): ?>
-
-
-                    <form
-                        method="POST"
-                        style="display:inline;"
-                        onsubmit="
-                            return confirm(
-                                'Delete this announcement?'
-                            );
+                <div
+                    class="card"
+                    style="
+                        margin-top:15px;
+                        border:1px solid #eee;
+                    "
+                >
+
+
+                    <div
+                        style="
+                            display:flex;
+                            justify-content:space-between;
+                            align-items:flex-start;
+                            gap:15px;
                         "
                     >
 
 
-                        <input
-                            type="hidden"
-                            name="announcement_id"
-                            value="<?php echo $announcement["id"]; ?>"
+                        <div style="flex:1;">
+
+
+                            <h3
+                                style="
+                                    margin:0 0 10px;
+                                "
+                            >
+
+                                📢
+
+                                <?php echo htmlspecialchars(
+                                    $announcement["title"]
+                                ); ?>
+
+                            </h3>
+
+
+                            <div
+                                style="
+                                    color:#444;
+                                    line-height:1.6;
+                                    white-space:pre-wrap;
+                                "
+                            >
+
+                                <?php echo htmlspecialchars(
+                                    $announcement["message"]
+                                ); ?>
+
+                            </div>
+
+
+                            <div
+                                style="
+                                    color:#888;
+                                    font-size:13px;
+                                    margin-top:12px;
+                                "
+                            >
+
+                                Posted by
+
+                                <strong>
+
+                                    <?php echo htmlspecialchars(
+                                        $announcement["creator_name"]
+                                    ); ?>
+
+                                </strong>
+
+                                ·
+
+                                <?php echo date(
+                                    "d M Y, h:i A",
+                                    strtotime(
+                                        $announcement["created_at"]
+                                    )
+                                ); ?>
+
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+
+                    <!-- ANNOUNCEMENT ACTIONS -->
+
+                    <?php if ($can_edit_announcement): ?>
+
+
+                        <div
+                            style="
+                                display:flex;
+                                gap:8px;
+                                margin-top:15px;
+                                flex-wrap:wrap;
+                            "
                         >
 
 
-                        <button
-                            type="submit"
-                            name="delete_announcement"
-                            class="delete-button"
-                        >
+                            <!-- EDIT -->
 
-                            🗑️ Delete
-
-                        </button>
+                            <details>
 
 
-                    </form>
+                                <summary
+                                    class="action-btn edit-btn"
+                                    style="cursor:pointer;"
+                                >
+
+                                    ✏️ Edit
+
+                                </summary>
+
+
+                                <form
+                                    method="POST"
+                                    style="
+                                        margin-top:15px;
+                                        padding:15px;
+                                        background:#fafafa;
+                                        border-radius:10px;
+                                    "
+                                >
+
+
+                                    <input
+                                        type="hidden"
+                                        name="announcement_id"
+                                        value="<?php echo $announcement["id"]; ?>"
+                                    >
+
+
+                                    <div class="form-grid">
+
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Title
+                                            </label>
+
+                                            <input
+                                                type="text"
+                                                name="title"
+                                                value="<?php echo htmlspecialchars(
+                                                    $announcement["title"]
+                                                ); ?>"
+                                                maxlength="255"
+                                                required
+                                            >
+
+                                        </div>
+
+
+                                        <div class="form-group">
+
+                                            <label>
+                                                Message
+                                            </label>
+
+                                            <textarea
+                                                name="message"
+                                                rows="4"
+                                                required
+                                            ><?php echo htmlspecialchars(
+                                                $announcement["message"]
+                                            ); ?></textarea>
+
+                                        </div>
+
+
+                                    </div>
+
+
+                                    <button
+                                        type="submit"
+                                        name="edit_announcement"
+                                        class="action-btn edit-btn"
+                                    >
+
+                                        💾 Save Changes
+
+                                    </button>
+
+
+                                </form>
+
+
+                            </details>
+
+
+
+                            <!-- DELETE -->
+
+                            <?php if ($can_delete_announcement): ?>
+
+
+                                <form
+                                    method="POST"
+                                    style="display:inline;"
+                                    onsubmit="
+                                        return confirm(
+                                            'Are you sure you want to delete this announcement?'
+                                        );
+                                    "
+                                >
+
+
+                                    <input
+                                        type="hidden"
+                                        name="announcement_id"
+                                        value="<?php echo $announcement["id"]; ?>"
+                                    >
+
+
+                                    <button
+                                        type="submit"
+                                        name="delete_announcement"
+                                        class="action-btn delete-btn"
+                                    >
+
+                                        🗑️ Delete
+
+                                    </button>
+
+
+                                </form>
+
+
+                            <?php endif; ?>
+
+
+                        </div>
 
 
                     <?php endif; ?>
@@ -1609,26 +970,21 @@ td {
                 </div>
 
 
-                <?php endif; ?>
-
-
-            </div>
-
-
             <?php endforeach; ?>
 
 
         <?php else: ?>
 
 
-            <div class="no-announcement">
+            <div
+                style="
+                    text-align:center;
+                    padding:30px 15px;
+                    color:#888;
+                "
+            >
 
-                🔔 No announcements yet.
-
-                <br>
-
-                Announcements from the Manager or
-                Junior Manager will appear here.
+                📭 No announcements yet.
 
             </div>
 
@@ -1636,40 +992,56 @@ td {
         <?php endif; ?>
 
 
-    </section>
+    </div>
 
 
-    <!-- =================================================
+
+    <!-- ==================================================
          MEMBERS
-    ================================================= -->
+    ================================================== -->
 
-    <section
-        class="members-card"
+    <div
+        class="card"
         id="members"
     >
 
 
-        <div class="section-header">
+        <div class="topbar">
 
 
-            <h2>
+            <div>
 
-                👥 Members
+                <h2>
 
-            </h2>
+                    👥 Members
+
+                </h2>
+
+                <p
+                    style="
+                        margin:5px 0 0;
+                        color:#777;
+                    "
+                >
+
+                    Members currently in this meal group.
+
+                </p>
+
+            </div>
 
 
         </div>
 
 
-        <?php if (count($members) > 0): ?>
+
+        <div class="table-container">
 
 
-            <div class="members-table-wrapper">
+            <table class="table">
 
 
-                <table>
-
+                <thead>
 
                     <tr>
 
@@ -1685,242 +1057,243 @@ td {
                             Role
                         </th>
 
-                        <th>
-                            Action
-                        </th>
+                        <?php if ($current_role === "manager"): ?>
+
+                            <th>
+                                Actions
+                            </th>
+
+                        <?php endif; ?>
 
                     </tr>
+
+                </thead>
+
+
+                <tbody>
 
 
                     <?php foreach ($members as $member): ?>
 
 
-                    <tr>
+                        <tr>
 
 
-                        <td>
+                            <td>
 
-                            <?php echo htmlspecialchars(
-                                $member["name"]
-                            ); ?>
+                                <strong>
 
-                        </td>
+                                    <?php echo htmlspecialchars(
+                                        $member["name"]
+                                    ); ?>
 
+                                </strong>
 
-                        <td>
-
-                            <?php echo htmlspecialchars(
-                                $member["email"]
-                            ); ?>
-
-                        </td>
+                            </td>
 
 
-                        <td>
+                            <td>
+
+                                <?php echo htmlspecialchars(
+                                    $member["email"]
+                                ); ?>
+
+                            </td>
 
 
-                            <?php if (
-                                $member["role"]
-                                === "manager"
-                            ): ?>
-
-
-                                <span class="role-manager">
-
-                                    Manager
-
-                                </span>
-
-
-                            <?php elseif (
-                                $member["role"]
-                                === "junior_manager"
-                            ): ?>
-
-
-                                <span class="role-junior">
-
-                                    Junior Manager
-
-                                </span>
-
-
-                            <?php else: ?>
-
-
-                                <span class="role-member">
-
-                                    Member
-
-                                </span>
-
-
-                            <?php endif; ?>
-
-
-                        </td>
-
-
-                        <td>
-
-
-                            <?php
-
-                            /*
-                                Manager controls.
-                            */
-
-                            if (
-                                $meal["role"]
-                                === "manager"
-                            ):
-
-                            ?>
+                            <td>
 
 
                                 <?php if (
-                                    $member["role"]
-                                    === "member"
+                                    $member["role"] === "manager"
                                 ): ?>
 
 
-                                    <a
-                                        class="action-link"
-                                        href="../meal/promote_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                        onclick="
-                                            return confirm(
-                                                'Promote this member to Junior Manager?'
-                                            );
+                                    <span
+                                        style="
+                                            color:#7c3aed;
+                                            font-weight:bold;
                                         "
                                     >
 
-                                        Promote to Junior Manager
+                                        Manager
 
-                                    </a>
-
-
-                                    <br>
-
-
-                                    <a
-                                        class="action-link"
-                                        href="../meal/remove_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                        onclick="
-                                            return confirm(
-                                                'Are you sure you want to remove this member?'
-                                            );
-                                        "
-                                    >
-
-                                        Remove
-
-                                    </a>
+                                    </span>
 
 
                                 <?php elseif (
-                                    $member["role"]
-                                    === "junior_manager"
+                                    $member["role"] === "junior_manager"
                                 ): ?>
 
 
-                                    <a
-                                        class="action-link"
-                                        href="../meal/remove_junior_manager.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                        onclick="
-                                            return confirm(
-                                                'Remove Junior Manager role?'
-                                            );
+                                    <span
+                                        style="
+                                            color:#2563eb;
+                                            font-weight:bold;
                                         "
                                     >
 
-                                        Remove Junior Manager
+                                        Junior Manager
 
-                                    </a>
+                                    </span>
 
 
                                 <?php else: ?>
 
 
-                                    -
+                                    <span>
+
+                                        Member
+
+                                    </span>
+
 
                                 <?php endif; ?>
 
 
-                            <?php else: ?>
+                            </td>
 
 
-                                -
+
+                            <?php if ($current_role === "manager"): ?>
+
+
+                                <td>
+
+
+                                    <?php if (
+                                        $member["role"] === "member"
+                                    ): ?>
+
+
+                                        <a
+                                            href="../meal/promote_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
+                                            class="action-btn edit-btn"
+                                            onclick="
+                                                return confirm(
+                                                    'Promote this member to Junior Manager?'
+                                                );
+                                            "
+                                        >
+
+                                            Promote
+
+                                        </a>
+
+
+                                        <a
+                                            href="../meal/remove_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
+                                            class="action-btn delete-btn"
+                                            onclick="
+                                                return confirm(
+                                                    'Are you sure you want to remove this member?'
+                                                );
+                                            "
+                                        >
+
+                                            Remove
+
+                                        </a>
+
+
+                                    <?php elseif (
+                                        $member["role"] === "junior_manager"
+                                    ): ?>
+
+
+                                        <a
+                                            href="../meal/remove_junior_manager.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
+                                            class="action-btn delete-btn"
+                                            onclick="
+                                                return confirm(
+                                                    'Remove Junior Manager role from this member?'
+                                                );
+                                            "
+                                        >
+
+                                            Remove Junior Manager
+
+                                        </a>
+
+
+                                    <?php else: ?>
+
+
+                                        -
+
+                                    <?php endif; ?>
+
+
+                                </td>
+
 
                             <?php endif; ?>
 
 
-                        </td>
-
-
-                    </tr>
+                        </tr>
 
 
                     <?php endforeach; ?>
 
 
-                </table>
+                </tbody>
 
 
-            </div>
+            </table>
 
 
-        <?php else: ?>
+        </div>
 
 
-            <p>
-
-                No members found.
-
-            </p>
+    </div>
 
 
-        <?php endif; ?>
 
-
-    </section>
-
+    <!-- ==================================================
+         BACK
+    ================================================== -->
 
     <a
         href="index.php"
-        class="back-dashboard"
+        style="
+            display:inline-block;
+            margin-top:20px;
+            color:#7c3aed;
+            text-decoration:none;
+            font-weight:600;
+        "
     >
 
-        ← Back to Dashboard
+        ← Back to My Groups
 
     </a>
-
-
-</main>
 
 
 </div>
 
 
+
+<!-- ==================================================
+     JAVASCRIPT
+================================================== -->
+
 <script>
 
-/* =================================================
-   ANNOUNCEMENT FORM
-================================================= */
+function toggleAnnouncementForm() {
 
-function showAnnouncementForm() {
+    const form =
+        document.getElementById("announcementForm");
 
-    document.getElementById(
-        "announcementForm"
-    ).style.display = "block";
+    if (form.style.display === "none" ||
+        form.style.display === "") {
 
-}
+        form.style.display = "block";
 
+    } else {
 
-function hideAnnouncementForm() {
+        form.style.display = "none";
 
-    document.getElementById(
-        "announcementForm"
-    ).style.display = "none";
+    }
 
 }
 

@@ -3,7 +3,10 @@
 session_start();
 require_once "../config/database.php";
 
-// Check login
+// --------------------------------------------------
+// CHECK LOGIN
+// --------------------------------------------------
+
 if (!isset($_SESSION["user_id"])) {
     header("Location: ../login.php");
     exit;
@@ -11,7 +14,11 @@ if (!isset($_SESSION["user_id"])) {
 
 $user_id = $_SESSION["user_id"];
 
-// Check meal ID
+
+// --------------------------------------------------
+// CHECK MEAL ID
+// --------------------------------------------------
+
 if (!isset($_GET["id"]) || !is_numeric($_GET["id"])) {
     die("Invalid meal group.");
 }
@@ -24,7 +31,7 @@ $meal_id = (int) $_GET["id"];
 // --------------------------------------------------
 
 $stmt = $pdo->prepare("
-    SELECT 
+    SELECT
         mg.id,
         mg.name,
         mg.month_name,
@@ -38,7 +45,10 @@ $stmt = $pdo->prepare("
       AND mm.user_id = ?
 ");
 
-$stmt->execute([$meal_id, $user_id]);
+$stmt->execute([
+    $meal_id,
+    $user_id
+]);
 
 $meal = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -53,7 +63,10 @@ $current_role = $meal["role"];
 // CHECK IF USER CAN EDIT
 // --------------------------------------------------
 
-$can_edit = ($current_role === "manager" || $current_role === "junior_manager");
+$can_edit = (
+    $current_role === "manager" ||
+    $current_role === "junior_manager"
+);
 
 
 // --------------------------------------------------
@@ -62,7 +75,12 @@ $can_edit = ($current_role === "manager" || $current_role === "junior_manager");
 
 $month_number = date(
     "n",
-    strtotime("1 " . $meal["month_name"] . " " . $meal["year"])
+    strtotime(
+        "1 " .
+        $meal["month_name"] .
+        " " .
+        $meal["year"]
+    )
 );
 
 $year = (int) $meal["year"];
@@ -84,7 +102,7 @@ $days_in_month = cal_days_in_month(
 // --------------------------------------------------
 
 $stmt = $pdo->prepare("
-    SELECT 
+    SELECT
         u.id,
         u.name,
         mm.role
@@ -101,7 +119,9 @@ $stmt = $pdo->prepare("
         u.name
 ");
 
-$stmt->execute([$meal_id]);
+$stmt->execute([
+    $meal_id
+]);
 
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -111,7 +131,7 @@ $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // --------------------------------------------------
 
 $stmt = $pdo->prepare("
-    SELECT 
+    SELECT
         user_id,
         meal_date,
         meal_amount
@@ -119,7 +139,9 @@ $stmt = $pdo->prepare("
     WHERE meal_group_id = ?
 ");
 
-$stmt->execute([$meal_id]);
+$stmt->execute([
+    $meal_id
+]);
 
 $meal_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -146,7 +168,10 @@ foreach ($meal_records as $record) {
 $message = "";
 $error = "";
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
+if (
+    $_SERVER["REQUEST_METHOD"] === "POST" &&
+    $can_edit
+) {
 
     $member_id = isset($_POST["user_id"])
         ? (int) $_POST["user_id"]
@@ -160,7 +185,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
         ? $_POST["meal_amount"]
         : "0";
 
-    // Validate member
+
+    // ----------------------------------------------
+    // VALIDATE MEMBER
+    // ----------------------------------------------
+
     $member_check = $pdo->prepare("
         SELECT id
         FROM meal_members
@@ -173,21 +202,48 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
         $member_id
     ]);
 
+
     if (!$member_check->fetch()) {
 
         $error = "Invalid member.";
 
-    } elseif ($day < 1 || $day > $days_in_month) {
+    }
+
+    // ----------------------------------------------
+    // VALIDATE DAY
+    // ----------------------------------------------
+
+    elseif (
+        $day < 1 ||
+        $day > $days_in_month
+    ) {
 
         $error = "Invalid date.";
 
-    } elseif (!in_array((string)$meal_amount, ["0", "0.5", "1"], true)) {
+    }
+
+    // ----------------------------------------------
+    // VALIDATE MEAL VALUE
+    // ----------------------------------------------
+
+    elseif (
+        !in_array(
+            (string) $meal_amount,
+            ["0", "0.5", "1"],
+            true
+        )
+    ) {
 
         $error = "Meal must be 0, 0.5, or 1.";
 
-    } else {
+    }
 
-        // Create actual date
+    else {
+
+        // ------------------------------------------
+        // CREATE ACTUAL DATE
+        // ------------------------------------------
+
         $meal_date = sprintf(
             "%04d-%02d-%02d",
             $year,
@@ -195,10 +251,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
             $day
         );
 
-        // Insert or update meal
+
+        // ------------------------------------------
+        // INSERT OR UPDATE MEAL
+        // ------------------------------------------
+
         $stmt = $pdo->prepare("
             INSERT INTO daily_meals
-                (meal_group_id, user_id, meal_date, meal_amount)
+                (
+                    meal_group_id,
+                    user_id,
+                    meal_date,
+                    meal_amount
+                )
             VALUES
                 (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
@@ -212,10 +277,58 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
             $meal_amount
         ]);
 
+
         $message = "Meal updated successfully.";
 
-        // Update local array immediately
+
+        // ------------------------------------------
+        // UPDATE LOCAL ARRAY
+        // ------------------------------------------
+
         $meals[$member_id][$meal_date] = $meal_amount;
+
+
+        // ------------------------------------------
+        // AJAX RESPONSE
+        // ------------------------------------------
+
+        if (
+            isset($_SERVER["HTTP_X_REQUESTED_WITH"]) &&
+            strtolower($_SERVER["HTTP_X_REQUESTED_WITH"]) === "xmlhttprequest"
+        ) {
+
+            header("Content-Type: application/json");
+
+            echo json_encode([
+                "success" => true,
+                "message" => "Saved",
+                "user_id" => $member_id,
+                "day" => $day,
+                "meal_amount" => (float) $meal_amount
+            ]);
+
+            exit;
+        }
+    }
+
+
+    // ----------------------------------------------
+    // AJAX ERROR RESPONSE
+    // ----------------------------------------------
+
+    if (
+        isset($_SERVER["HTTP_X_REQUESTED_WITH"]) &&
+        strtolower($_SERVER["HTTP_X_REQUESTED_WITH"]) === "xmlhttprequest"
+    ) {
+
+        header("Content-Type: application/json");
+
+        echo json_encode([
+            "success" => false,
+            "message" => $error
+        ]);
+
+        exit;
     }
 }
 
@@ -224,9 +337,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && $can_edit) {
 // FUNCTION TO GET MEAL VALUE
 // --------------------------------------------------
 
-function getMealValue($meals, $user_id, $date)
-{
-    if (isset($meals[$user_id][$date])) {
+function getMealValue(
+    $meals,
+    $user_id,
+    $date
+) {
+
+    if (
+        isset(
+            $meals[$user_id][$date]
+        )
+    ) {
+
         return $meals[$user_id][$date];
     }
 
@@ -236,408 +358,227 @@ function getMealValue($meals, $user_id, $date)
 ?>
 
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
 
     <meta charset="UTF-8">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <title>Daily Meals - <?php echo htmlspecialchars($meal["name"]); ?></title>
+    <title>
+        Daily Meals -
+        <?php echo htmlspecialchars($meal["name"]); ?>
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="../css/style.css"
+    >
 
     <style>
 
-        * {
-            box-sizing: border-box;
-        }
+        /* ------------------------------------------
+           DAILY MEALS SPECIFIC DESIGN
+        ------------------------------------------ */
 
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f7f5fb;
-            color: #333;
-        }
-
-        /* -----------------------------------------
-           SIDEBAR
-        ----------------------------------------- */
-
-        .sidebar {
-            width: 250px;
-            height: 100vh;
-            position: fixed;
-            left: 0;
-            top: 0;
-
-            background: linear-gradient(
-                180deg,
-                #8e5bb7,
-                #6f4196
-            );
-
-            color: white;
-            padding: 25px 15px;
-
-            overflow-y: auto;
-        }
-
-        .logo {
-            font-size: 22px;
-            font-weight: bold;
-            margin-bottom: 30px;
-            padding-left: 10px;
-        }
-
-        .meal-title {
-            font-size: 14px;
-            opacity: 0.8;
-            padding: 0 10px;
-            margin-bottom: 20px;
-        }
-
-        .nav-link {
-            display: block;
-            text-decoration: none;
-            color: white;
-
-            padding: 13px 15px;
-            margin-bottom: 8px;
-
-            border-radius: 10px;
-
-            transition: 0.2s;
-        }
-
-        .nav-link:hover {
-            background: rgba(255,255,255,0.15);
-        }
-
-        .nav-link.active {
-            background: white;
-            color: #6f4196;
-            font-weight: bold;
-        }
-
-        .sidebar-bottom {
-            margin-top: 30px;
-            border-top: 1px solid rgba(255,255,255,0.2);
-            padding-top: 20px;
-        }
-
-
-        /* -----------------------------------------
-           MAIN
-        ----------------------------------------- */
-
-        .main {
-            margin-left: 250px;
-            padding: 30px;
-        }
-
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-
-            margin-bottom: 25px;
-        }
-
-        .top-bar h1 {
-            margin: 0;
-            font-size: 28px;
-        }
-
-        .role {
-            background: #eee5f7;
-            color: #6f4196;
-
-            padding: 8px 13px;
-            border-radius: 20px;
-
-            font-size: 13px;
-            font-weight: bold;
-        }
-
-
-        /* -----------------------------------------
-           INFO
-        ----------------------------------------- */
-
-        .info-card {
-            background: white;
-            border-radius: 15px;
-
-            padding: 20px;
-
-            margin-bottom: 25px;
-
-            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
-
-            display: flex;
-            gap: 35px;
-            flex-wrap: wrap;
-        }
-
-        .info-item strong {
-            display: block;
-            color: #777;
-            font-size: 12px;
-            margin-bottom: 5px;
-        }
-
-        .info-item span {
-            font-weight: bold;
-        }
-
-
-        /* -----------------------------------------
-           ALERTS
-        ----------------------------------------- */
-
-        .success {
-            background: #e8f8ed;
-            color: #207a3c;
-
-            padding: 12px 15px;
-
-            border-radius: 10px;
-
-            margin-bottom: 20px;
-        }
-
-        .error {
-            background: #fdeaea;
-            color: #a32121;
-
-            padding: 12px 15px;
-
-            border-radius: 10px;
-
-            margin-bottom: 20px;
-        }
-
-
-        /* -----------------------------------------
-           TABLE
-        ----------------------------------------- */
-
-        .table-card {
-            background: white;
-
-            border-radius: 15px;
-
-            padding: 20px;
-
-            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
-
+        .daily-meals-card {
             overflow: hidden;
         }
 
-        .table-header {
+        .daily-meals-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-
+            gap: 20px;
             margin-bottom: 20px;
         }
 
-        .table-header h2 {
-            margin: 0;
-            font-size: 20px;
+        .daily-meals-header h2 {
+            margin: 0 0 5px;
         }
 
-        .edit-info {
-            font-size: 13px;
+        .page-description {
+            margin: 0;
             color: #777;
         }
 
-        .table-wrapper {
-            overflow-x: auto;
+        .edit-status {
+            background: #f3e8ff;
+            color: #7c3aed;
+            padding: 10px 15px;
             border-radius: 10px;
-        }
-
-        table {
-            border-collapse: collapse;
-            width: max-content;
-            min-width: 100%;
-        }
-
-        th,
-        td {
-            border: 1px solid #ddd;
-
-            text-align: center;
-
-            padding: 8px;
-
+            font-size: 14px;
+            font-weight: 600;
             white-space: nowrap;
         }
 
-        th {
-            background: #f1e9f8;
-            color: #55316f;
+        .daily-meals-table-container {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: 12px;
+        }
+
+        .daily-meals-table {
+            min-width: 1000px;
+            border-collapse: collapse;
+        }
+
+        .daily-meals-table th,
+        .daily-meals-table td {
+            text-align: center;
+            vertical-align: middle;
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .daily-meals-table th {
+            background: #faf5ff;
+            color: #555;
             font-size: 13px;
         }
 
-        .member-column {
+        .daily-member-column {
+            min-width: 170px;
+            text-align: left !important;
             position: sticky;
             left: 0;
-
+            z-index: 2;
             background: white;
+        }
 
-            min-width: 180px;
-
-            text-align: left;
-
+        .daily-meals-table thead .daily-member-column {
+            background: #faf5ff;
             z-index: 3;
         }
 
-        th.member-column {
-            background: #e8daf2;
+        .daily-day-column {
+            min-width: 55px;
         }
 
-        .total-column {
-            position: sticky;
-            right: 0;
-
-            background: #f8f3fb;
-
-            min-width: 80px;
-
-            font-weight: bold;
-
-            z-index: 2;
-        }
-
-        th.total-column {
-            background: #e8daf2;
-        }
-
-        .day-header {
-            min-width: 52px;
-        }
-
-        .day-number {
-            font-weight: bold;
-        }
-
-        .day-name {
-            font-size: 10px;
-            color: #777;
+        .daily-day-number {
             display: block;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .daily-day-name {
+            display: block;
+            font-size: 11px;
+            color: #999;
             margin-top: 3px;
         }
 
-        .meal-cell {
-            min-width: 52px;
+        .daily-total-column {
+            min-width: 70px;
+            font-weight: bold;
+            background: #fafafa;
         }
 
-        .meal-form {
+        .daily-member-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .daily-member-role {
+            font-size: 12px;
+            color: #999;
+            margin-top: 3px;
+            text-transform: capitalize;
+        }
+
+        .daily-meal-cell {
+            min-width: 55px;
+        }
+
+        .daily-meal-form {
             margin: 0;
+            padding: 0;
         }
 
-        .meal-select {
-            width: 45px;
-
-            padding: 5px 2px;
-
-            border: 1px solid #ccc;
-
-            border-radius: 5px;
-
+        .daily-meal-select {
+            width: 50px;
+            padding: 7px 4px;
+            border: 1px solid #ddd;
+            border-radius: 7px;
             background: white;
-
+            color: #333;
+            font-size: 14px;
             text-align: center;
-
             cursor: pointer;
         }
 
-        .meal-select:focus {
-            outline: 2px solid #b990d1;
+        .daily-meal-select:focus {
+            outline: none;
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
         }
 
-        .readonly-meal {
-            font-weight: bold;
+        .daily-meal-select.saving {
+            opacity: 0.6;
         }
 
-        .member-name {
-            font-weight: bold;
+        .daily-meal-select.saved {
+            border-color: #22c55e;
         }
 
-        .member-role {
-            display: block;
-
-            font-size: 11px;
-
-            color: #888;
-
-            margin-top: 3px;
+        .daily-readonly-meal {
+            display: inline-flex;
+            width: 32px;
+            height: 32px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 7px;
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #555;
         }
 
-        .total-meal {
-            color: #6f4196;
-        }
-
-
-        /* -----------------------------------------
-           BUTTON
-        ----------------------------------------- */
-
-        .back-button {
-            display: inline-block;
-
-            margin-top: 20px;
-
-            padding: 10px 16px;
-
-            background: #6f4196;
-
+        .meal-save-status {
+            position: fixed;
+            right: 25px;
+            bottom: 25px;
+            padding: 11px 17px;
+            border-radius: 10px;
+            background: #22c55e;
             color: white;
-
-            text-decoration: none;
-
-            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+            opacity: 0;
+            transform: translateY(10px);
+            pointer-events: none;
+            transition: all 0.2s ease;
+            z-index: 9999;
         }
 
-        .back-button:hover {
-            background: #5d347e;
+        .meal-save-status.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
-
-        /* -----------------------------------------
-           MOBILE
-        ----------------------------------------- */
+        .meal-save-status.error {
+            background: #ef4444;
+        }
 
         @media (max-width: 768px) {
 
-            .sidebar {
-                position: relative;
-
-                width: 100%;
-                height: auto;
-            }
-
-            .main {
-                margin-left: 0;
-
-                padding: 20px 10px;
-            }
-
-            .top-bar {
-                flex-direction: column;
-
+            .daily-meals-header {
                 align-items: flex-start;
-
-                gap: 10px;
+                flex-direction: column;
             }
 
-            .info-card {
-                gap: 20px;
+            .edit-status {
+                width: 100%;
+                box-sizing: border-box;
             }
 
-            .table-card {
-                padding: 10px;
+            .daily-member-column {
+                min-width: 140px;
             }
 
         }
@@ -650,9 +591,9 @@ function getMealValue($meals, $user_id, $date)
 <body>
 
 
-<!-- =========================================
+<!-- ==================================================
      SIDEBAR
-========================================= -->
+================================================== -->
 
 <div class="sidebar">
 
@@ -660,10 +601,13 @@ function getMealValue($meals, $user_id, $date)
         🍚 Meal System
     </div>
 
-    <div class="meal-title">
-        <?php echo htmlspecialchars($meal["name"]); ?>
+    <div class="nav-title">
+        <?php
+        echo htmlspecialchars(
+            $meal["name"]
+        );
+        ?>
     </div>
-
 
     <a
         href="meal.php?id=<?php echo $meal_id; ?>"
@@ -672,14 +616,12 @@ function getMealValue($meals, $user_id, $date)
         🏠 Overview
     </a>
 
-
     <a
         href="daily_meals.php?id=<?php echo $meal_id; ?>"
         class="nav-link active"
     >
-        🍚 Daily Meals
+        🍽️ Daily Meals
     </a>
-
 
     <a
         href="market.php?id=<?php echo $meal_id; ?>"
@@ -688,14 +630,12 @@ function getMealValue($meals, $user_id, $date)
         🛒 Market / Bazar
     </a>
 
-
     <a
         href="payments.php?id=<?php echo $meal_id; ?>"
         class="nav-link"
     >
         💰 Given Money
     </a>
-
 
     <a
         href="calculation.php?id=<?php echo $meal_id; ?>"
@@ -704,108 +644,75 @@ function getMealValue($meals, $user_id, $date)
         🧮 Calculation
     </a>
 
-
-    <div class="sidebar-bottom">
-
-        <a
-            href="meal.php?id=<?php echo $meal_id; ?>#members"
-            class="nav-link"
-        >
-            👥 Members
-        </a>
-
-        <a
-            href="index.php"
-            class="nav-link"
-        >
-            📋 My Meal Groups
-        </a>
-
-        <a
-            href="../logout.php"
-            class="nav-link"
-        >
-            🚪 Logout
-        </a>
-
+    <div class="nav-title">
+        Group
     </div>
+
+    <a
+        href="meal.php?id=<?php echo $meal_id; ?>#members"
+        class="nav-link"
+    >
+        👥 Members
+    </a>
+
+    <a
+        href="index.php"
+        class="nav-link"
+    >
+        📋 My Groups
+    </a>
+
+    <a
+        href="../logout.php"
+        class="nav-link"
+    >
+        🚪 Logout
+    </a>
 
 </div>
 
 
-
-<!-- =========================================
+<!-- ==================================================
      MAIN CONTENT
-========================================= -->
+================================================== -->
 
 <div class="main">
 
 
-    <div class="top-bar">
+    <!-- TOPBAR -->
+
+    <div class="topbar">
 
         <div>
-            <h1>Daily Meals</h1>
+
+            <h1>
+                🍽️ Daily Meals
+            </h1>
+
         </div>
 
-        <div class="role">
-            <?php echo ucfirst(str_replace("_", " ", $current_role)); ?>
-        </div>
+        <div class="user">
 
-    </div>
-
-
-
-    <!-- INFO CARD -->
-
-    <div class="info-card">
-
-        <div class="info-item">
-
-            <strong>MEAL GROUP</strong>
+            <?php
+            echo htmlspecialchars(
+                $_SESSION["user_name"]
+            );
+            ?>
 
             <span>
-                <?php echo htmlspecialchars($meal["name"]); ?>
-            </span>
 
-        </div>
+                ·
 
-
-        <div class="info-item">
-
-            <strong>PERIOD</strong>
-
-            <span>
-                <?php
-                echo htmlspecialchars($meal["month_name"])
-                    . " "
-                    . htmlspecialchars($meal["year"]);
-                ?>
-            </span>
-
-        </div>
-
-
-        <div class="info-item">
-
-            <strong>DAYS</strong>
-
-            <span>
-                <?php echo $days_in_month; ?> Days
-            </span>
-
-        </div>
-
-
-        <div class="info-item">
-
-            <strong>YOUR ROLE</strong>
-
-            <span>
                 <?php
                 echo ucfirst(
-                    str_replace("_", " ", $current_role)
+                    str_replace(
+                        "_",
+                        " ",
+                        $current_role
+                    )
                 );
                 ?>
+
             </span>
 
         </div>
@@ -813,13 +720,113 @@ function getMealValue($meals, $user_id, $date)
     </div>
 
 
+    <!-- GROUP INFORMATION -->
 
-    <!-- MESSAGES -->
+    <div class="card">
+
+        <h2>
+            <?php
+            echo htmlspecialchars(
+                $meal["name"]
+            );
+            ?>
+        </h2>
+
+        <div class="group-info">
+
+            <div>
+
+                <strong>
+                    Meal Group
+                </strong>
+
+                <br>
+
+                <?php
+                echo htmlspecialchars(
+                    $meal["name"]
+                );
+                ?>
+
+            </div>
+
+
+            <div>
+
+                <strong>
+                    Period
+                </strong>
+
+                <br>
+
+                <?php
+                echo htmlspecialchars(
+                    $meal["month_name"]
+                );
+
+                echo " ";
+
+                echo htmlspecialchars(
+                    $meal["year"]
+                );
+                ?>
+
+            </div>
+
+
+            <div>
+
+                <strong>
+                    Days
+                </strong>
+
+                <br>
+
+                <?php
+                echo $days_in_month;
+                ?>
+                Days
+
+            </div>
+
+
+            <div>
+
+                <strong>
+                    Your Role
+                </strong>
+
+                <br>
+
+                <?php
+                echo ucfirst(
+                    str_replace(
+                        "_",
+                        " ",
+                        $current_role
+                    )
+                );
+                ?>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- SUCCESS / ERROR -->
 
     <?php if ($message): ?>
 
-        <div class="success">
-            <?php echo htmlspecialchars($message); ?>
+        <div class="success-message">
+
+            <?php
+            echo htmlspecialchars(
+                $message
+            );
+            ?>
+
         </div>
 
     <?php endif; ?>
@@ -827,30 +834,54 @@ function getMealValue($meals, $user_id, $date)
 
     <?php if ($error): ?>
 
-        <div class="error">
-            <?php echo htmlspecialchars($error); ?>
+        <div class="error-message">
+
+            <?php
+            echo htmlspecialchars(
+                $error
+            );
+            ?>
+
         </div>
 
     <?php endif; ?>
 
 
+    <!-- DAILY MEALS -->
 
-    <!-- TABLE -->
-
-    <div class="table-card">
-
-        <div class="table-header">
-
-            <h2>
-                <?php
-                echo htmlspecialchars($meal["month_name"])
-                    . " "
-                    . htmlspecialchars($meal["year"]);
-                ?>
-            </h2>
+    <div class="card daily-meals-card">
 
 
-            <div class="edit-info">
+        <div class="daily-meals-header">
+
+            <div>
+
+                <h2>
+
+                    <?php
+                    echo htmlspecialchars(
+                        $meal["month_name"]
+                    );
+
+                    echo " ";
+
+                    echo htmlspecialchars(
+                        $meal["year"]
+                    );
+                    ?>
+
+                </h2>
+
+                <p class="page-description">
+
+                    Record daily meals for all group members.
+
+                </p>
+
+            </div>
+
+
+            <div class="edit-status">
 
                 <?php if ($can_edit): ?>
 
@@ -867,23 +898,28 @@ function getMealValue($meals, $user_id, $date)
         </div>
 
 
+        <!-- TABLE -->
 
-        <div class="table-wrapper">
+        <div class="daily-meals-table-container">
 
-            <table>
+            <table class="table daily-meals-table">
 
                 <thead>
 
                     <tr>
 
-                        <th class="member-column">
+                        <th class="daily-member-column">
                             Member
                         </th>
 
 
-                        <?php for ($day = 1; $day <= $days_in_month; $day++): ?>
+                        <?php
 
-                            <?php
+                        for (
+                            $day = 1;
+                            $day <= $days_in_month;
+                            $day++
+                        ):
 
                             $date_string = sprintf(
                                 "%04d-%02d-%02d",
@@ -894,19 +930,29 @@ function getMealValue($meals, $user_id, $date)
 
                             $day_name = date(
                                 "D",
-                                strtotime($date_string)
+                                strtotime(
+                                    $date_string
+                                )
                             );
 
-                            ?>
+                        ?>
 
-                            <th class="day-header">
+                            <th class="daily-day-column">
 
-                                <span class="day-number">
-                                    <?php echo $day; ?>
+                                <span class="daily-day-number">
+
+                                    <?php
+                                    echo $day;
+                                    ?>
+
                                 </span>
 
-                                <span class="day-name">
-                                    <?php echo $day_name; ?>
+                                <span class="daily-day-name">
+
+                                    <?php
+                                    echo $day_name;
+                                    ?>
+
                                 </span>
 
                             </th>
@@ -914,14 +960,13 @@ function getMealValue($meals, $user_id, $date)
                         <?php endfor; ?>
 
 
-                        <th class="total-column">
+                        <th class="daily-total-column">
                             Total
                         </th>
 
                     </tr>
 
                 </thead>
-
 
 
                 <tbody>
@@ -935,22 +980,25 @@ function getMealValue($meals, $user_id, $date)
 
                         ?>
 
+
                         <tr>
 
 
                             <!-- MEMBER -->
 
-                            <td class="member-column">
+                            <td class="daily-member-column">
 
-                                <span class="member-name">
+                                <div class="daily-member-name">
+
                                     <?php
                                     echo htmlspecialchars(
                                         $member["name"]
                                     );
                                     ?>
-                                </span>
 
-                                <span class="member-role">
+                                </div>
+
+                                <div class="daily-member-role">
 
                                     <?php
                                     echo ucfirst(
@@ -962,17 +1010,20 @@ function getMealValue($meals, $user_id, $date)
                                     );
                                     ?>
 
-                                </span>
+                                </div>
 
                             </td>
 
 
+                            <!-- DAILY MEALS -->
 
-                            <!-- DAYS -->
+                            <?php
 
-                            <?php for ($day = 1; $day <= $days_in_month; $day++): ?>
-
-                                <?php
+                            for (
+                                $day = 1;
+                                $day <= $days_in_month;
+                                $day++
+                            ):
 
                                 $date_string = sprintf(
                                     "%04d-%02d-%02d",
@@ -981,24 +1032,29 @@ function getMealValue($meals, $user_id, $date)
                                     $day
                                 );
 
+
                                 $meal_value = getMealValue(
                                     $meals,
                                     $member["id"],
                                     $date_string
                                 );
 
-                                $member_total += (float)$meal_value;
 
-                                ?>
+                                $member_total +=
+                                    (float) $meal_value;
 
-                                <td class="meal-cell">
+                            ?>
+
+
+                                <td class="daily-meal-cell">
 
 
                                     <?php if ($can_edit): ?>
 
+
                                         <form
                                             method="POST"
-                                            class="meal-form"
+                                            class="daily-meal-form"
                                         >
 
                                             <input
@@ -1016,14 +1072,16 @@ function getMealValue($meals, $user_id, $date)
 
                                             <select
                                                 name="meal_amount"
-                                                class="meal-select"
-                                                onchange="this.form.submit()"
+                                                class="daily-meal-select"
+                                                data-user-id="<?php echo $member["id"]; ?>"
+                                                data-day="<?php echo $day; ?>"
                                             >
+
 
                                                 <option
                                                     value="0"
                                                     <?php
-                                                    echo ((string)$meal_value === "0.00" || (string)$meal_value === "0")
+                                                    echo ((float) $meal_value === 0.0)
                                                         ? "selected"
                                                         : "";
                                                     ?>
@@ -1035,7 +1093,7 @@ function getMealValue($meals, $user_id, $date)
                                                 <option
                                                     value="0.5"
                                                     <?php
-                                                    echo ((string)$meal_value === "0.50" || (string)$meal_value === "0.5")
+                                                    echo ((float) $meal_value === 0.5)
                                                         ? "selected"
                                                         : "";
                                                     ?>
@@ -1047,13 +1105,14 @@ function getMealValue($meals, $user_id, $date)
                                                 <option
                                                     value="1"
                                                     <?php
-                                                    echo ((string)$meal_value === "1.00" || (string)$meal_value === "1")
+                                                    echo ((float) $meal_value === 1.0)
                                                         ? "selected"
                                                         : "";
                                                     ?>
                                                 >
                                                     1
                                                 </option>
+
 
                                             </select>
 
@@ -1062,31 +1121,48 @@ function getMealValue($meals, $user_id, $date)
 
                                     <?php else: ?>
 
-                                        <span class="readonly-meal">
-                                            <?php echo $meal_value; ?>
+
+                                        <span class="daily-readonly-meal">
+
+                                            <?php
+                                            echo number_format(
+                                                (float) $meal_value,
+                                                1
+                                            );
+                                            ?>
+
                                         </span>
+
 
                                     <?php endif; ?>
 
 
                                 </td>
 
-                            <?php endfor; ?>
 
+                            <?php endfor; ?>
 
 
                             <!-- TOTAL -->
 
-                            <td class="total-column">
+                            <td class="daily-total-column">
 
-                                <span class="total-meal">
-                                    <?php echo number_format($member_total, 1); ?>
-                                </span>
+                                <strong>
+
+                                    <?php
+                                    echo number_format(
+                                        $member_total,
+                                        1
+                                    );
+                                    ?>
+
+                                </strong>
 
                             </td>
 
 
                         </tr>
+
 
                     <?php endforeach; ?>
 
@@ -1097,20 +1173,208 @@ function getMealValue($meals, $user_id, $date)
 
         </div>
 
-
     </div>
 
 
+    <!-- BACK BUTTON -->
 
     <a
         href="meal.php?id=<?php echo $meal_id; ?>"
-        class="back-button"
+        class="action-btn"
+        style="
+            display:inline-block;
+            margin-top:20px;
+            text-decoration:none;
+        "
     >
+
         ← Back to Overview
+
     </a>
 
 
 </div>
+
+
+<!-- SAVE STATUS -->
+
+<div
+    id="mealSaveStatus"
+    class="meal-save-status"
+>
+    ✓ Meal saved
+</div>
+
+
+<!-- ==================================================
+     AJAX MEAL SAVING
+================================================== -->
+
+<script>
+
+document.querySelectorAll(".daily-meal-select").forEach(function(select) {
+
+    select.addEventListener("change", function() {
+
+        const mealSelect = this;
+
+        const form = mealSelect.closest(".daily-meal-form");
+
+        const userId = form.querySelector(
+            'input[name="user_id"]'
+        ).value;
+
+        const day = form.querySelector(
+            'input[name="day"]'
+        ).value;
+
+        const mealAmount = mealSelect.value;
+
+        const status = document.getElementById(
+            "mealSaveStatus"
+        );
+
+
+        // Show saving state
+
+        mealSelect.classList.add("saving");
+
+        mealSelect.disabled = true;
+
+
+        // Create form data
+
+        const formData = new FormData();
+
+        formData.append(
+            "user_id",
+            userId
+        );
+
+        formData.append(
+            "day",
+            day
+        );
+
+        formData.append(
+            "meal_amount",
+            mealAmount
+        );
+
+
+        // Save without reloading
+
+        fetch(
+            window.location.href,
+            {
+                method: "POST",
+
+                headers: {
+                    "X-Requested-With":
+                        "XMLHttpRequest"
+                },
+
+                body: formData
+            }
+        )
+
+        .then(function(response) {
+
+            return response.json();
+
+        })
+
+        .then(function(data) {
+
+            if (data.success) {
+
+                mealSelect.classList.remove(
+                    "saving"
+                );
+
+                mealSelect.classList.add(
+                    "saved"
+                );
+
+
+                status.textContent =
+                    "✓ Meal saved";
+
+                status.classList.remove(
+                    "error"
+                );
+
+                status.classList.add(
+                    "show"
+                );
+
+
+                setTimeout(function() {
+
+                    mealSelect.classList.remove(
+                        "saved"
+                    );
+
+                    status.classList.remove(
+                        "show"
+                    );
+
+                }, 1200);
+
+            }
+
+            else {
+
+                throw new Error(
+                    data.message ||
+                    "Could not save meal."
+                );
+
+            }
+
+        })
+
+        .catch(function(error) {
+
+            console.error(error);
+
+            status.textContent =
+                "✕ Could not save meal";
+
+            status.classList.add(
+                "error"
+            );
+
+            status.classList.add(
+                "show"
+            );
+
+
+            setTimeout(function() {
+
+                status.classList.remove(
+                    "show"
+                );
+
+            }, 2000);
+
+        })
+
+        .finally(function() {
+
+            mealSelect.disabled = false;
+
+            mealSelect.classList.remove(
+                "saving"
+            );
+
+        });
+
+    });
+
+});
+
+</script>
 
 
 </body>

@@ -8,8 +8,8 @@ $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-    $email = trim($_POST["email"]);
-    $password = $_POST["password"];
+    $email = trim($_POST["email"] ?? "");
+    $password = $_POST["password"] ?? "";
 
     if (empty($email) || empty($password)) {
 
@@ -19,7 +19,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         // Find user by email
         $stmt = $pdo->prepare(
-            "SELECT id, name, email, password FROM users WHERE email = ?"
+            "SELECT id, name, email, password
+             FROM users
+             WHERE email = ?"
         );
 
         $stmt->execute([$email]);
@@ -50,42 +52,233 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Login - Meal System</title>
+
+    <link rel="stylesheet" href="css/style.css">
+
+    <style>
+
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: #f5f3ff;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 430px;
+            background: white;
+            padding: 35px;
+            border-radius: 18px;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
+            box-sizing: border-box;
+        }
+
+        .auth-logo {
+            text-align: center;
+            font-size: 26px;
+            font-weight: bold;
+            color: #7c3aed;
+            margin-bottom: 25px;
+        }
+
+        .auth-card h1 {
+            text-align: center;
+            margin: 0 0 10px;
+            font-size: 26px;
+        }
+
+        .auth-description {
+            text-align: center;
+            color: #777;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 7px;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 15px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #7c3aed;
+        }
+
+        .forgot-password {
+            text-align: right;
+            margin-top: -8px;
+            margin-bottom: 20px;
+        }
+
+        .forgot-password a {
+            color: #7c3aed;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .forgot-password a:hover {
+            text-decoration: underline;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 10px;
+            background: #7c3aed;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .login-btn:hover {
+            background: #6d28d9;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 18px;
+            font-size: 14px;
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 22px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .register-link a {
+            color: #7c3aed;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+
+    </style>
+
 </head>
 
 <body>
 
-    <h1>Meal System</h1>
+<div class="auth-page">
 
-    <h2>Login</h2>
+    <div class="auth-card">
 
-    <?php if ($message): ?>
-        <p><?php echo htmlspecialchars($message); ?></p>
-    <?php endif; ?>
+        <div class="auth-logo">
+            🍽️ Meal System
+        </div>
 
-    <form method="POST">
+        <h1>Login</h1>
 
-        <label>Email:</label><br>
-        <input type="email" name="email" required>
+        <p class="auth-description">
+            Login to manage your meals and groups.
+        </p>
 
-        <br><br>
+        <?php if ($message): ?>
 
-        <label>Password:</label><br>
-        <input type="password" name="password" required>
+            <div class="error-message">
+                <?= htmlspecialchars($message) ?>
+            </div>
 
-        <br><br>
+        <?php endif; ?>
 
-        <button type="submit">Login</button>
+        <form method="POST">
 
-    </form>
+            <div class="form-group">
 
-    <p>
-        Don't have an account?
-        <a href="register.php">Register</a>
-    </p>
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your email"
+                    value="<?= htmlspecialchars($_POST["email"] ?? "") ?>"
+                    required
+                >
+
+            </div>
+
+            <div class="form-group">
+
+                <label for="password">
+                    Password
+                </label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    required
+                >
+
+            </div>
+
+            <div class="forgot-password">
+                <a href="forgot_password.php">
+                    Forgot Password?
+                </a>
+            </div>
+
+            <button type="submit" class="login-btn">
+                Login
+            </button>
+
+        </form>
+
+        <div class="register-link">
+
+            Don't have an account?
+
+            <a href="register.php">
+                Register
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
 
 </body>
 

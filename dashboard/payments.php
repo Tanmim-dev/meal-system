@@ -1,17 +1,33 @@
 <?php
+
 session_start();
+
 require_once "../config/database.php";
 
+
+/* -------------------------------------------------
+   LOGIN CHECK
+------------------------------------------------- */
+
 if (!isset($_SESSION["user_id"])) {
+
     header("Location: ../login.php");
     exit;
+
 }
 
+
 $user_id = $_SESSION["user_id"];
-$group_id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
+
+$group_id = isset($_GET["id"])
+    ? (int)$_GET["id"]
+    : 0;
+
 
 if ($group_id <= 0) {
+
     die("Invalid meal group.");
+
 }
 
 
@@ -28,19 +44,28 @@ $stmt = $pdo->prepare("
         mg.year,
         mm.role
     FROM meal_groups mg
+
     INNER JOIN meal_members mm
         ON mg.id = mm.meal_group_id
+
     WHERE mg.id = ?
       AND mm.user_id = ?
 ");
 
-$stmt->execute([$group_id, $user_id]);
+$stmt->execute([
+    $group_id,
+    $user_id
+]);
 
 $group = $stmt->fetch(PDO::FETCH_ASSOC);
 
+
 if (!$group) {
+
     die("You are not a member of this meal group.");
+
 }
+
 
 $role = $group["role"];
 
@@ -53,35 +78,57 @@ $role = $group["role"];
     Delete payments
 */
 
-$can_edit = ($role === "manager" || $role === "junior_manager");
-$can_delete = ($role === "manager");
+$can_edit =
+    ($role === "manager" || $role === "junior_manager");
+
+$can_delete =
+    ($role === "manager");
 
 
 /* -------------------------------------------------
    ADD PAYMENT
 ------------------------------------------------- */
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["add_payment"])) {
+if (
+    $_SERVER["REQUEST_METHOD"] === "POST"
+    && isset($_POST["add_payment"])
+) {
 
     if (!$can_edit) {
+
         die("You do not have permission to add payments.");
+
     }
 
-    $payment_user_id = (int)($_POST["payment_user_id"] ?? 0);
-    $amount = $_POST["amount"] ?? "";
-    $payment_date = $_POST["payment_date"] ?? "";
-    $note = trim($_POST["note"] ?? "");
+
+    $payment_user_id =
+        (int)($_POST["payment_user_id"] ?? 0);
+
+    $amount =
+        $_POST["amount"] ?? "";
+
+    $payment_date =
+        $_POST["payment_date"] ?? "";
+
+    $note =
+        trim($_POST["note"] ?? "");
+
 
     if (
         $payment_user_id <= 0 ||
         $amount === "" ||
         $payment_date === ""
     ) {
+
         die("Please fill in all required fields.");
+
     }
 
+
     if (!is_numeric($amount) || $amount <= 0) {
+
         die("Invalid payment amount.");
+
     }
 
 
@@ -99,8 +146,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["add_payment"])) {
         $payment_user_id
     ]);
 
+
     if (!$stmt->fetch()) {
+
         die("Invalid member.");
+
     }
 
 
@@ -128,8 +178,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["add_payment"])) {
         $user_id
     ]);
 
-    header("Location: payments.php?id=" . $group_id);
+
+    header(
+        "Location: payments.php?id=" . $group_id
+    );
+
     exit;
+
 }
 
 
@@ -137,17 +192,33 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["add_payment"])) {
    EDIT PAYMENT
 ------------------------------------------------- */
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["edit_payment"])) {
+if (
+    $_SERVER["REQUEST_METHOD"] === "POST"
+    && isset($_POST["edit_payment"])
+) {
 
     if (!$can_edit) {
+
         die("You do not have permission to edit payments.");
+
     }
 
-    $payment_id = (int)($_POST["payment_id"] ?? 0);
-    $payment_user_id = (int)($_POST["payment_user_id"] ?? 0);
-    $amount = $_POST["amount"] ?? "";
-    $payment_date = $_POST["payment_date"] ?? "";
-    $note = trim($_POST["note"] ?? "");
+
+    $payment_id =
+        (int)($_POST["payment_id"] ?? 0);
+
+    $payment_user_id =
+        (int)($_POST["payment_user_id"] ?? 0);
+
+    $amount =
+        $_POST["amount"] ?? "";
+
+    $payment_date =
+        $_POST["payment_date"] ?? "";
+
+    $note =
+        trim($_POST["note"] ?? "");
+
 
     if (
         $payment_id <= 0 ||
@@ -155,11 +226,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["edit_payment"])) {
         $amount === "" ||
         $payment_date === ""
     ) {
+
         die("Please fill in all required fields.");
+
     }
 
+
     if (!is_numeric($amount) || $amount <= 0) {
+
         die("Invalid payment amount.");
+
     }
 
 
@@ -177,8 +253,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["edit_payment"])) {
         $payment_user_id
     ]);
 
+
     if (!$stmt->fetch()) {
+
         die("Invalid member.");
+
     }
 
 
@@ -204,8 +283,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["edit_payment"])) {
         $group_id
     ]);
 
-    header("Location: payments.php?id=" . $group_id);
+
+    header(
+        "Location: payments.php?id=" . $group_id
+    );
+
     exit;
+
 }
 
 
@@ -213,13 +297,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["edit_payment"])) {
    DELETE PAYMENT
 ------------------------------------------------- */
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["delete_payment"])) {
+if (
+    $_SERVER["REQUEST_METHOD"] === "POST"
+    && isset($_POST["delete_payment"])
+) {
 
     if (!$can_delete) {
+
         die("You do not have permission to delete payments.");
+
     }
 
-    $payment_id = (int)($_POST["payment_id"] ?? 0);
+
+    $payment_id =
+        (int)($_POST["payment_id"] ?? 0);
+
 
     $stmt = $pdo->prepare("
         DELETE FROM payments
@@ -232,8 +324,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["delete_payment"])) {
         $group_id
     ]);
 
-    header("Location: payments.php?id=" . $group_id);
+
+    header(
+        "Location: payments.php?id=" . $group_id
+    );
+
     exit;
+
 }
 
 
@@ -247,9 +344,12 @@ $stmt = $pdo->prepare("
         u.name,
         mm.role
     FROM meal_members mm
+
     INNER JOIN users u
         ON mm.user_id = u.id
+
     WHERE mm.meal_group_id = ?
+
     ORDER BY
         CASE mm.role
             WHEN 'manager' THEN 1
@@ -259,9 +359,12 @@ $stmt = $pdo->prepare("
         u.name
 ");
 
-$stmt->execute([$group_id]);
+$stmt->execute([
+    $group_id
+]);
 
-$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$members =
+    $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
 /* -------------------------------------------------
@@ -276,20 +379,32 @@ $stmt = $pdo->prepare("
         p.payment_date,
         p.note,
         p.added_by,
+
         u.name AS member_name,
+
         adder.name AS added_by_name
+
     FROM payments p
+
     INNER JOIN users u
         ON p.user_id = u.id
+
     INNER JOIN users adder
         ON p.added_by = adder.id
+
     WHERE p.meal_group_id = ?
-    ORDER BY p.payment_date DESC, p.id DESC
+
+    ORDER BY
+        p.payment_date DESC,
+        p.id DESC
 ");
 
-$stmt->execute([$group_id]);
+$stmt->execute([
+    $group_id
+]);
 
-$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$payments =
+    $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
 /* -------------------------------------------------
@@ -298,8 +413,12 @@ $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $total_given = 0;
 
+
 foreach ($payments as $payment) {
-    $total_given += (float)$payment["amount"];
+
+    $total_given +=
+        (float)$payment["amount"];
+
 }
 
 
@@ -309,451 +428,56 @@ foreach ($payments as $payment) {
 
 $member_totals = [];
 
+
 foreach ($members as $member) {
+
     $member_totals[$member["id"]] = 0;
+
 }
+
 
 foreach ($payments as $payment) {
 
-    if (isset($member_totals[$payment["user_id"]])) {
+    if (
+        isset(
+            $member_totals[$payment["user_id"]]
+        )
+    ) {
+
         $member_totals[$payment["user_id"]] +=
             (float)$payment["amount"];
+
     }
+
 }
 
 ?>
 
+
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
 
-<meta charset="UTF-8">
+    <meta charset="UTF-8">
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<title>Given Money - Meal System</title>
+    <title>
+        Given Money - Meal System
+    </title>
 
 
-<style>
+    <!-- GLOBAL STYLESHEET -->
 
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f7f7fb;
-    color: #333;
-}
-
-
-/* -------------------------------------------------
-   SIDEBAR
-------------------------------------------------- */
-
-.sidebar {
-    position: fixed;
-
-    left: 0;
-    top: 0;
-
-    width: 250px;
-    height: 100vh;
-
-    background: linear-gradient(
-        180deg,
-        #f3e8ff,
-        #fce7f3
-    );
-
-    padding: 25px 18px;
-
-    overflow-y: auto;
-}
-
-.logo {
-    font-size: 22px;
-    font-weight: bold;
-
-    margin-bottom: 30px;
-
-    color: #6b21a8;
-}
-
-.nav-title {
-    font-size: 12px;
-
-    color: #777;
-
-    margin: 20px 10px 8px;
-
-    text-transform: uppercase;
-}
-
-.nav-link {
-    display: block;
-
-    text-decoration: none;
-
-    color: #444;
-
-    padding: 12px 14px;
-
-    border-radius: 10px;
-
-    margin-bottom: 6px;
-
-    transition: 0.2s;
-}
-
-.nav-link:hover {
-    background: #ffffff;
-}
-
-.nav-link.active {
-    background: #ffffff;
-
-    color: #7c3aed;
-
-    font-weight: bold;
-}
-
-
-/* -------------------------------------------------
-   MAIN
-------------------------------------------------- */
-
-.main {
-    margin-left: 250px;
-
-    padding: 30px;
-}
-
-.topbar {
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    margin-bottom: 25px;
-}
-
-.topbar h1 {
-    margin: 0;
-
-    font-size: 28px;
-}
-
-.user {
-    color: #666;
-}
-
-
-/* -------------------------------------------------
-   CARD
-------------------------------------------------- */
-
-.card {
-    background: white;
-
-    border-radius: 15px;
-
-    padding: 25px;
-
-    margin-bottom: 25px;
-
-    box-shadow:
-        0 3px 15px rgba(0,0,0,0.06);
-}
-
-.card h2 {
-    margin-top: 0;
-}
-
-
-/* -------------------------------------------------
-   GROUP INFO
-------------------------------------------------- */
-
-.group-info {
-    display: flex;
-
-    gap: 25px;
-
-    flex-wrap: wrap;
-
-    color: #555;
-}
-
-
-/* -------------------------------------------------
-   FORM
-------------------------------------------------- */
-
-.form-grid {
-    display: grid;
-
-    grid-template-columns:
-        1.5fr
-        1fr
-        1fr
-        2fr
-        auto;
-
-    gap: 12px;
-
-    align-items: end;
-}
-
-.form-group {
-    display: flex;
-
-    flex-direction: column;
-}
-
-.form-group label {
-    font-size: 13px;
-
-    margin-bottom: 6px;
-
-    color: #666;
-}
-
-input,
-select {
-    padding: 11px;
-
-    border: 1px solid #ddd;
-
-    border-radius: 8px;
-
-    font-size: 14px;
-
-    background: white;
-}
-
-button {
-    border: none;
-
-    padding: 11px 18px;
-
-    border-radius: 8px;
-
-    cursor: pointer;
-
-    font-size: 14px;
-}
-
-.add-btn {
-    background: #7c3aed;
-
-    color: white;
-}
-
-.add-btn:hover {
-    background: #6d28d9;
-}
-
-
-/* -------------------------------------------------
-   TABLE
-------------------------------------------------- */
-
-.table-container {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-
-    border-collapse: collapse;
-
-    min-width: 850px;
-}
-
-th {
-    background: #f5f3ff;
-
-    text-align: left;
-
-    padding: 13px;
-
-    font-size: 14px;
-}
-
-td {
-    padding: 13px;
-
-    border-bottom: 1px solid #eee;
-
-    font-size: 14px;
-}
-
-tr:hover {
-    background: #fafafa;
-}
-
-
-/* -------------------------------------------------
-   TOTAL
-------------------------------------------------- */
-
-.total-box {
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    background: #f5f3ff;
-
-    padding: 18px;
-
-    border-radius: 10px;
-
-    margin-top: 20px;
-}
-
-.total-label {
-    font-weight: bold;
-}
-
-.total-amount {
-    font-size: 22px;
-
-    font-weight: bold;
-
-    color: #7c3aed;
-}
-
-
-/* -------------------------------------------------
-   ACTION BUTTONS
-------------------------------------------------- */
-
-.action-btn {
-    padding: 7px 11px;
-
-    font-size: 12px;
-
-    margin-right: 5px;
-}
-
-.edit-btn {
-    background: #ede9fe;
-
-    color: #6d28d9;
-}
-
-.delete-btn {
-    background: #fee2e2;
-
-    color: #dc2626;
-}
-
-
-/* -------------------------------------------------
-   MEMBER TOTAL CARD
-------------------------------------------------- */
-
-.member-summary {
-    display: grid;
-
-    grid-template-columns:
-        repeat(auto-fit, minmax(180px, 1fr));
-
-    gap: 15px;
-}
-
-.member-box {
-    background: #faf9ff;
-
-    border: 1px solid #eee;
-
-    border-radius: 10px;
-
-    padding: 15px;
-}
-
-.member-name {
-    font-weight: bold;
-
-    margin-bottom: 6px;
-}
-
-.member-money {
-    font-size: 20px;
-
-    color: #7c3aed;
-
-    font-weight: bold;
-}
-
-
-/* -------------------------------------------------
-   EDIT FORM
-------------------------------------------------- */
-
-.edit-form {
-    display: flex;
-
-    flex-wrap: wrap;
-
-    gap: 7px;
-
-    margin-top: 10px;
-}
-
-.edit-form input,
-.edit-form select {
-    width: 120px;
-}
-
-
-/* -------------------------------------------------
-   MOBILE
-------------------------------------------------- */
-
-@media (max-width: 900px) {
-
-    .sidebar {
-        position: relative;
-
-        width: 100%;
-
-        height: auto;
-    }
-
-    .main {
-        margin-left: 0;
-
-        padding: 20px;
-    }
-
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .topbar {
-        flex-direction: column;
-
-        align-items: flex-start;
-
-        gap: 10px;
-    }
-
-    .group-info {
-        flex-direction: column;
-
-        gap: 8px;
-    }
-
-}
-
-</style>
+    <link
+        rel="stylesheet"
+        href="../css/style.css"
+    >
 
 </head>
 
@@ -767,101 +491,151 @@ tr:hover {
 
 <div class="sidebar">
 
+
     <div class="logo">
+
         🍚 Meal System
+
     </div>
 
+
+    <!-- OVERVIEW -->
 
     <a
         href="meal.php?id=<?= $group_id ?>"
         class="nav-link"
     >
+
         🏠 Overview
+
     </a>
 
+
+    <!-- DAILY MEALS -->
 
     <a
         href="daily_meals.php?id=<?= $group_id ?>"
         class="nav-link"
     >
+
         🍽️ Daily Meals
+
     </a>
 
+
+    <!-- MARKET -->
 
     <a
         href="market.php?id=<?= $group_id ?>"
         class="nav-link"
     >
+
         🛒 Market / Bazar
+
     </a>
 
+
+    <!-- GIVEN MONEY -->
 
     <a
         href="payments.php?id=<?= $group_id ?>"
         class="nav-link active"
     >
+
         💰 Given Money
+
     </a>
 
+
+    <!-- CALCULATION -->
 
     <a
         href="calculation.php?id=<?= $group_id ?>"
         class="nav-link"
     >
+
         🧮 Calculation
+
     </a>
 
 
+    <!-- GROUP SECTION -->
+
     <div class="nav-title">
+
         Group
+
     </div>
 
+
+    <!-- MEMBERS -->
 
     <a
         href="meal.php?id=<?= $group_id ?>#members"
         class="nav-link"
     >
+
         👥 Members
+
     </a>
 
+
+    <!-- MY GROUPS -->
 
     <a
         href="index.php"
         class="nav-link"
     >
+
         📋 My Groups
+
     </a>
 
+
+    <!-- LOGOUT -->
 
     <a
         href="../logout.php"
         class="nav-link"
     >
+
         🚪 Logout
+
     </a>
+
 
 </div>
 
 
 <!-- =================================================
-     MAIN
+     MAIN CONTENT
 ================================================= -->
 
 <div class="main">
 
 
-    <!-- TOP BAR -->
+    <!-- =================================================
+         TOP BAR
+    ================================================= -->
 
     <div class="topbar">
+
 
         <div>
 
             <h1>
+
                 💰 Given Money
+
             </h1>
 
+
             <div class="user">
-                <?= htmlspecialchars($group["name"]) ?>
+
+                <?= htmlspecialchars(
+                    $group["name"]
+                ) ?>
+
             </div>
 
         </div>
@@ -869,41 +643,66 @@ tr:hover {
 
         <div class="user">
 
-            <?= htmlspecialchars($_SESSION["user_name"]) ?>
+            <?= htmlspecialchars(
+                $_SESSION["user_name"]
+            ) ?>
 
-            (<?= htmlspecialchars($role) ?>)
+            (
+
+            <?= htmlspecialchars(
+                $role
+            ) ?>
+
+            )
 
         </div>
+
 
     </div>
 
 
-    <!-- GROUP INFO -->
+    <!-- =================================================
+         GROUP INFORMATION
+    ================================================= -->
 
     <div class="card">
 
+
         <div class="group-info">
 
+
             <div>
 
-                <strong>Period:</strong>
+                <strong>
+                    Period:
+                </strong>
 
-                <?= htmlspecialchars($group["month_name"]) ?>
+                <?= htmlspecialchars(
+                    $group["month_name"]
+                ) ?>
 
-                <?= htmlspecialchars($group["year"]) ?>
+                <?= htmlspecialchars(
+                    $group["year"]
+                ) ?>
 
             </div>
 
 
             <div>
 
-                <strong>Join Code:</strong>
+                <strong>
+                    Join Code:
+                </strong>
 
-                <?= htmlspecialchars($group["join_code"]) ?>
+                <?= htmlspecialchars(
+                    $group["join_code"]
+                ) ?>
 
             </div>
+
 
         </div>
+
 
     </div>
 
@@ -917,8 +716,11 @@ tr:hover {
 
     <div class="card">
 
+
         <h2>
+
             ➕ Add Given Money
+
         </h2>
 
 
@@ -928,47 +730,70 @@ tr:hover {
             <div class="form-grid">
 
 
+                <!-- MEMBER -->
+
                 <div class="form-group">
+
 
                     <label>
                         Member
                     </label>
+
 
                     <select
                         name="payment_user_id"
                         required
                     >
 
+
                         <option value="">
+
                             Select Member
-                        </option>
-
-
-                        <?php foreach ($members as $member): ?>
-
-                        <option
-                            value="<?= $member["id"] ?>"
-                        >
-
-                            <?= htmlspecialchars($member["name"]) ?>
-
-                            -
-                            <?= htmlspecialchars($member["role"]) ?>
 
                         </option>
+
+
+                        <?php foreach (
+                            $members
+                            as $member
+                        ): ?>
+
+
+                            <option
+                                value="<?= $member["id"] ?>"
+                            >
+
+                                <?= htmlspecialchars(
+                                    $member["name"]
+                                ) ?>
+
+                                -
+
+                                <?= htmlspecialchars(
+                                    $member["role"]
+                                ) ?>
+
+                            </option>
+
 
                         <?php endforeach; ?>
 
+
                     </select>
+
 
                 </div>
 
 
+                <!-- AMOUNT -->
+
                 <div class="form-group">
+
 
                     <label>
                         Amount
                     </label>
+
 
                     <input
                         type="number"
@@ -979,14 +804,19 @@ tr:hover {
                         required
                     >
 
+
                 </div>
 
 
+                <!-- DATE -->
+
                 <div class="form-group">
+
 
                     <label>
                         Date
                     </label>
+
 
                     <input
                         type="date"
@@ -995,14 +825,19 @@ tr:hover {
                         required
                     >
 
+
                 </div>
 
 
+                <!-- NOTE -->
+
                 <div class="form-group">
+
 
                     <label>
                         Note
                     </label>
+
 
                     <input
                         type="text"
@@ -1010,86 +845,114 @@ tr:hover {
                         placeholder="Monthly payment"
                     >
 
+
                 </div>
 
+
+                <!-- ADD BUTTON -->
 
                 <button
                     type="submit"
                     name="add_payment"
                     class="add-btn"
                 >
+
                     Add Money
+
                 </button>
 
 
             </div>
 
+
         </form>
 
+
     </div>
+
 
     <?php endif; ?>
 
 
     <!-- =================================================
-         MEMBER TOTALS
+         MEMBER CONTRIBUTIONS
     ================================================= -->
 
     <div class="card">
 
+
         <h2>
+
             👥 Member Contributions
+
         </h2>
 
 
         <div class="member-summary">
 
 
-            <?php foreach ($members as $member): ?>
+            <?php foreach (
+                $members
+                as $member
+            ): ?>
 
-            <div class="member-box">
 
-                <div class="member-name">
+                <div class="member-box">
 
-                    <?= htmlspecialchars($member["name"]) ?>
+
+                    <div class="member-name">
+
+                        <?= htmlspecialchars(
+                            $member["name"]
+                        ) ?>
+
+                    </div>
+
+
+                    <div>
+
+                        <?= htmlspecialchars(
+                            $member["role"]
+                        ) ?>
+
+                    </div>
+
+
+                    <div class="member-money">
+
+                        ৳<?= number_format(
+                            $member_totals[
+                                $member["id"]
+                            ] ?? 0,
+                            2
+                        ) ?>
+
+                    </div>
+
 
                 </div>
 
-
-                <div>
-
-                    <?= htmlspecialchars($member["role"]) ?>
-
-                </div>
-
-
-                <div class="member-money">
-
-                    ৳<?= number_format(
-                        $member_totals[$member["id"]] ?? 0,
-                        2
-                    ) ?>
-
-                </div>
-
-            </div>
 
             <?php endforeach; ?>
 
 
         </div>
 
+
     </div>
 
 
     <!-- =================================================
-         PAYMENT LIST
+         PAYMENT HISTORY
     ================================================= -->
 
     <div class="card">
 
+
         <h2>
+
             📋 Payment History
+
         </h2>
 
 
@@ -1103,34 +966,43 @@ tr:hover {
 
                     <tr>
 
+
                         <th>
                             Member
                         </th>
+
 
                         <th>
                             Amount
                         </th>
 
+
                         <th>
                             Date
                         </th>
 
+
                         <th>
                             Note
                         </th>
+
 
                         <th>
                             Added By
                         </th>
 
 
-                        <?php if ($can_edit || $can_delete): ?>
+                        <?php if (
+                            $can_edit ||
+                            $can_delete
+                        ): ?>
 
-                        <th>
-                            Actions
-                        </th>
+                            <th>
+                                Actions
+                            </th>
 
                         <?php endif; ?>
+
 
                     </tr>
 
@@ -1140,221 +1012,271 @@ tr:hover {
                 <tbody>
 
 
-                <?php if (count($payments) > 0): ?>
+                <?php if (
+                    count($payments) > 0
+                ): ?>
 
 
-                    <?php foreach ($payments as $payment): ?>
+                    <?php foreach (
+                        $payments
+                        as $payment
+                    ): ?>
 
 
-                    <tr>
+                        <tr>
 
 
-                        <td>
+                            <!-- MEMBER -->
 
-                            <?= htmlspecialchars(
-                                $payment["member_name"]
-                            ) ?>
+                            <td>
 
-                        </td>
+                                <?= htmlspecialchars(
+                                    $payment["member_name"]
+                                ) ?>
 
-
-                        <td>
-
-                            ৳<?= number_format(
-                                $payment["amount"],
-                                2
-                            ) ?>
-
-                        </td>
+                            </td>
 
 
-                        <td>
+                            <!-- AMOUNT -->
 
-                            <?= date(
-                                "d M Y",
-                                strtotime($payment["payment_date"])
-                            ) ?>
+                            <td>
 
-                        </td>
+                                ৳<?= number_format(
+                                    $payment["amount"],
+                                    2
+                                ) ?>
 
-
-                        <td>
-
-                            <?= htmlspecialchars(
-                                $payment["note"] ?? "-"
-                            ) ?>
-
-                        </td>
+                            </td>
 
 
-                        <td>
+                            <!-- DATE -->
 
-                            <?= htmlspecialchars(
-                                $payment["added_by_name"]
-                            ) ?>
+                            <td>
 
-                        </td>
+                                <?= date(
+                                    "d M Y",
+                                    strtotime(
+                                        $payment["payment_date"]
+                                    )
+                                ) ?>
 
-
-                        <?php if ($can_edit || $can_delete): ?>
-
-
-                        <td>
-
-
-                            <?php if ($can_edit): ?>
+                            </td>
 
 
-                            <details>
+                            <!-- NOTE -->
 
-                                <summary
-                                    class="action-btn edit-btn"
-                                    style="
-                                        display:inline-block;
-                                        cursor:pointer;
-                                    "
-                                >
-                                    Edit
-                                </summary>
+                            <td>
+
+                                <?= htmlspecialchars(
+                                    $payment["note"] ?? "-"
+                                ) ?>
+
+                            </td>
 
 
-                                <form
-                                    method="POST"
-                                    class="edit-form"
-                                >
+                            <!-- ADDED BY -->
+
+                            <td>
+
+                                <?= htmlspecialchars(
+                                    $payment["added_by_name"]
+                                ) ?>
+
+                            </td>
 
 
-                                    <input
-                                        type="hidden"
-                                        name="payment_id"
-                                        value="<?= $payment["id"] ?>"
-                                    >
+                            <!-- ACTIONS -->
+
+                            <?php if (
+                                $can_edit ||
+                                $can_delete
+                            ): ?>
 
 
-                                    <select
-                                        name="payment_user_id"
-                                        required
-                                    >
+                                <td>
 
 
-                                        <?php foreach ($members as $member): ?>
+                                    <!-- EDIT -->
 
-                                        <option
-                                            value="<?= $member["id"] ?>"
-                                            <?= (
-                                                $member["id"]
-                                                ==
-                                                $payment["user_id"]
-                                            )
-                                                ? "selected"
-                                                : ""
-                                            ?>
+                                    <?php if (
+                                        $can_edit
+                                    ): ?>
+
+
+                                        <details>
+
+
+                                            <summary
+                                                class="action-btn edit-btn"
+                                            >
+
+                                                Edit
+
+                                            </summary>
+
+
+                                            <form
+                                                method="POST"
+                                                class="edit-form"
+                                            >
+
+
+                                                <input
+                                                    type="hidden"
+                                                    name="payment_id"
+                                                    value="<?= $payment["id"] ?>"
+                                                >
+
+
+                                                <!-- MEMBER -->
+
+                                                <select
+                                                    name="payment_user_id"
+                                                    required
+                                                >
+
+
+                                                    <?php foreach (
+                                                        $members
+                                                        as $member
+                                                    ): ?>
+
+
+                                                        <option
+                                                            value="<?= $member["id"] ?>"
+
+                                                            <?= (
+                                                                $member["id"]
+                                                                ==
+                                                                $payment["user_id"]
+                                                            )
+                                                                ? "selected"
+                                                                : ""
+                                                            ?>
+                                                        >
+
+                                                            <?= htmlspecialchars(
+                                                                $member["name"]
+                                                            ) ?>
+
+                                                        </option>
+
+
+                                                    <?php endforeach; ?>
+
+
+                                                </select>
+
+
+                                                <!-- AMOUNT -->
+
+                                                <input
+                                                    type="number"
+                                                    name="amount"
+                                                    step="0.01"
+                                                    min="0.01"
+                                                    value="<?= htmlspecialchars(
+                                                        $payment["amount"]
+                                                    ) ?>"
+                                                    required
+                                                >
+
+
+                                                <!-- DATE -->
+
+                                                <input
+                                                    type="date"
+                                                    name="payment_date"
+                                                    value="<?= htmlspecialchars(
+                                                        $payment["payment_date"]
+                                                    ) ?>"
+                                                    required
+                                                >
+
+
+                                                <!-- NOTE -->
+
+                                                <input
+                                                    type="text"
+                                                    name="note"
+                                                    value="<?= htmlspecialchars(
+                                                        $payment["note"] ?? ""
+                                                    ) ?>"
+                                                    placeholder="Note"
+                                                >
+
+
+                                                <!-- SAVE -->
+
+                                                <button
+                                                    type="submit"
+                                                    name="edit_payment"
+                                                    class="action-btn edit-btn"
+                                                >
+
+                                                    Save
+
+                                                </button>
+
+
+                                            </form>
+
+
+                                        </details>
+
+
+                                    <?php endif; ?>
+
+
+                                    <!-- DELETE -->
+
+                                    <?php if (
+                                        $can_delete
+                                    ): ?>
+
+
+                                        <form
+                                            method="POST"
+                                            style="display:inline;"
+                                            onsubmit="
+                                                return confirm(
+                                                    'Delete this payment?'
+                                                );
+                                            "
                                         >
 
-                                            <?= htmlspecialchars(
-                                                $member["name"]
-                                            ) ?>
 
-                                        </option>
-
-                                        <?php endforeach; ?>
-
-
-                                    </select>
+                                            <input
+                                                type="hidden"
+                                                name="payment_id"
+                                                value="<?= $payment["id"] ?>"
+                                            >
 
 
-                                    <input
-                                        type="number"
-                                        name="amount"
-                                        step="0.01"
-                                        min="0.01"
-                                        value="<?= htmlspecialchars(
-                                            $payment["amount"]
-                                        ) ?>"
-                                        required
-                                    >
+                                            <button
+                                                type="submit"
+                                                name="delete_payment"
+                                                class="action-btn delete-btn"
+                                            >
+
+                                                Delete
+
+                                            </button>
 
 
-                                    <input
-                                        type="date"
-                                        name="payment_date"
-                                        value="<?= htmlspecialchars(
-                                            $payment["payment_date"]
-                                        ) ?>"
-                                        required
-                                    >
+                                        </form>
 
 
-                                    <input
-                                        type="text"
-                                        name="note"
-                                        value="<?= htmlspecialchars(
-                                            $payment["note"] ?? ""
-                                        ) ?>"
-                                        placeholder="Note"
-                                    >
+                                    <?php endif; ?>
 
 
-                                    <button
-                                        type="submit"
-                                        name="edit_payment"
-                                        class="action-btn edit-btn"
-                                    >
-                                        Save
-                                    </button>
-
-
-                                </form>
-
-                            </details>
+                                </td>
 
 
                             <?php endif; ?>
 
 
-                            <?php if ($can_delete): ?>
-
-
-                            <form
-                                method="POST"
-                                style="display:inline;"
-                                onsubmit="
-                                    return confirm(
-                                        'Delete this payment?'
-                                    );
-                                "
-                            >
-
-
-                                <input
-                                    type="hidden"
-                                    name="payment_id"
-                                    value="<?= $payment["id"] ?>"
-                                >
-
-
-                                <button
-                                    type="submit"
-                                    name="delete_payment"
-                                    class="action-btn delete-btn"
-                                >
-                                    Delete
-                                </button>
-
-
-                            </form>
-
-
-                            <?php endif; ?>
-
-
-                        </td>
-
-
-                        <?php endif; ?>
-
-
-                    </tr>
+                        </tr>
 
 
                     <?php endforeach; ?>
@@ -1365,8 +1287,15 @@ tr:hover {
 
                     <tr>
 
+
                         <td
-                            colspan="6"
+                            colspan="<?= (
+                                $can_edit ||
+                                $can_delete
+                            )
+                                ? 6
+                                : 5
+                            ?>"
                             style="
                                 text-align:center;
                                 padding:30px;
@@ -1376,6 +1305,7 @@ tr:hover {
                             No payments added yet.
 
                         </td>
+
 
                     </tr>
 
@@ -1392,9 +1322,12 @@ tr:hover {
         </div>
 
 
-        <!-- TOTAL -->
+        <!-- =================================================
+             TOTAL GIVEN MONEY
+        ================================================= -->
 
         <div class="total-box">
+
 
             <div class="total-label">
 
@@ -1411,6 +1344,7 @@ tr:hover {
                 ) ?>
 
             </div>
+
 
         </div>
 
