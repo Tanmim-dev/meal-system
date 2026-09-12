@@ -2,15 +2,17 @@
 
 date_default_timezone_set("Asia/Dhaka");
 
-session_start();
-
 require_once __DIR__ . "/config/database.php";
+require_once __DIR__ . "/includes/auth.php";
 
 $message = "";
 $error = "";
 $reset_link = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // CSRF protection
+    verify_csrf();
 
     $email = trim($_POST["email"] ?? "");
 
@@ -57,7 +59,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             // Store only token hash
             $token_hash = hash("sha256", $token);
 
-            // MySQL calculates expiration time
+            // Token expires after 30 minutes
             $insert = $pdo->prepare("
                 INSERT INTO password_resets
                 (user_id, token_hash, expires_at)
@@ -69,12 +71,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $token_hash
             ]);
 
-            // Temporary local testing link
+            /*
+             * Temporary local testing link.
+             *
+             * This will later be replaced by an email
+             * when SMTP is connected.
+             */
             $reset_link =
                 "http://localhost/meal-system/reset_password.php?token="
                 . urlencode($token);
         }
 
+        /*
+         * Always show the same message whether the
+         * email exists or not.
+         */
         $message =
             "If an account with that email exists, password reset instructions have been sent.";
     }
@@ -324,6 +335,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
         <form method="POST">
+
+            <?= csrf_field() ?>
 
             <div class="form-group">
 

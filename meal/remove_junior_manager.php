@@ -1,21 +1,27 @@
 <?php
 
-session_start();
-
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-// Check login
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $current_user_id = $_SESSION["user_id"];
 
 
+// Only allow POST requests
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    http_response_code(405);
+    die("Invalid request method.");
+}
+
+
+// CSRF protection
+verify_csrf();
+
+
 // Get meal ID and target user ID
-$meal_id = $_GET["meal_id"] ?? null;
-$target_user_id = $_GET["user_id"] ?? null;
+$meal_id = $_POST["meal_id"] ?? null;
+$target_user_id = $_POST["user_id"] ?? null;
 
 
 // Validate IDs
@@ -95,6 +101,7 @@ $stmt = $pdo->prepare("
     SET role = 'member'
     WHERE meal_group_id = ?
     AND user_id = ?
+    AND role = 'junior_manager'
 ");
 
 $stmt->execute([

@@ -1,19 +1,11 @@
 <?php
 
-session_start();
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-// --------------------------------------------------
-// CHECK LOGIN
-// --------------------------------------------------
-
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $user_id = $_SESSION["user_id"];
-
 
 // --------------------------------------------------
 // CHECK MEAL ID
@@ -24,7 +16,6 @@ if (!isset($_GET["id"]) || !is_numeric($_GET["id"])) {
 }
 
 $meal_id = (int) $_GET["id"];
-
 
 // --------------------------------------------------
 // GET MEAL GROUP + CURRENT USER ROLE
@@ -58,7 +49,6 @@ if (!$meal) {
 
 $current_role = $meal["role"];
 
-
 // --------------------------------------------------
 // CHECK IF USER CAN EDIT
 // --------------------------------------------------
@@ -67,7 +57,6 @@ $can_edit = (
     $current_role === "manager" ||
     $current_role === "junior_manager"
 );
-
 
 // --------------------------------------------------
 // CONVERT MONTH NAME TO NUMBER
@@ -85,7 +74,6 @@ $month_number = date(
 
 $year = (int) $meal["year"];
 
-
 // --------------------------------------------------
 // NUMBER OF DAYS IN MONTH
 // --------------------------------------------------
@@ -95,7 +83,6 @@ $days_in_month = cal_days_in_month(
     $month_number,
     $year
 );
-
 
 // --------------------------------------------------
 // GET ALL MEMBERS
@@ -125,7 +112,6 @@ $stmt->execute([
 
 $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-
 // --------------------------------------------------
 // GET EXISTING MEALS
 // --------------------------------------------------
@@ -145,7 +131,6 @@ $stmt->execute([
 
 $meal_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-
 // --------------------------------------------------
 // CREATE EASY-TO-USE MEAL ARRAY
 // --------------------------------------------------
@@ -160,7 +145,6 @@ foreach ($meal_records as $record) {
     $meals[$member_id][$date] = $record["meal_amount"];
 }
 
-
 // --------------------------------------------------
 // HANDLE MEAL UPDATE
 // --------------------------------------------------
@@ -168,10 +152,39 @@ foreach ($meal_records as $record) {
 $message = "";
 $error = "";
 
-if (
-    $_SERVER["REQUEST_METHOD"] === "POST" &&
-    $can_edit
-) {
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // --------------------------------------------------
+    // VERIFY CSRF TOKEN
+    // --------------------------------------------------
+
+    verify_csrf();
+
+    // --------------------------------------------------
+    // CHECK EDIT PERMISSION
+    // --------------------------------------------------
+
+    if (!$can_edit) {
+
+        http_response_code(403);
+
+        if (
+            isset($_SERVER["HTTP_X_REQUESTED_WITH"]) &&
+            strtolower($_SERVER["HTTP_X_REQUESTED_WITH"]) === "xmlhttprequest"
+        ) {
+
+            header("Content-Type: application/json");
+
+            echo json_encode([
+                "success" => false,
+                "message" => "You do not have permission to edit meals."
+            ]);
+
+            exit;
+        }
+
+        die("You do not have permission to edit meals.");
+    }
 
     $member_id = isset($_POST["user_id"])
         ? (int) $_POST["user_id"]
@@ -182,13 +195,12 @@ if (
         : 0;
 
     $meal_amount = isset($_POST["meal_amount"])
-        ? $_POST["meal_amount"]
-        : "0";
+        ? trim($_POST["meal_amount"])
+        : "";
 
-
-    // ----------------------------------------------
+    // --------------------------------------------------
     // VALIDATE MEMBER
-    // ----------------------------------------------
+    // --------------------------------------------------
 
     $member_check = $pdo->prepare("
         SELECT id
@@ -202,16 +214,14 @@ if (
         $member_id
     ]);
 
-
     if (!$member_check->fetch()) {
 
         $error = "Invalid member.";
-
     }
 
-    // ----------------------------------------------
+    // --------------------------------------------------
     // VALIDATE DAY
-    // ----------------------------------------------
+    // --------------------------------------------------
 
     elseif (
         $day < 1 ||
@@ -219,30 +229,34 @@ if (
     ) {
 
         $error = "Invalid date.";
-
     }
 
-    // ----------------------------------------------
+    // --------------------------------------------------
     // VALIDATE MEAL VALUE
-    // ----------------------------------------------
+    // --------------------------------------------------
 
     elseif (
         !in_array(
-            (string) $meal_amount,
-            ["0", "0.5", "1"],
+            $meal_amount,
+            ["0", "0.5", "1", "1.5", "2", "2.5", "3"],
             true
         )
     ) {
 
-        $error = "Meal must be 0, 0.5, or 1.";
-
+        $error = "Invalid meal value. Allowed values: 0, 0.5, 1, 1.5, 2, 2.5, 3.";
     }
 
     else {
 
-        // ------------------------------------------
+        // --------------------------------------------------
+        // CONVERT MEAL VALUE
+        // --------------------------------------------------
+
+        $meal_amount = (float) $meal_amount;
+
+        // --------------------------------------------------
         // CREATE ACTUAL DATE
-        // ------------------------------------------
+        // --------------------------------------------------
 
         $meal_date = sprintf(
             "%04d-%02d-%02d",
@@ -251,21 +265,20 @@ if (
             $day
         );
 
-
-        // ------------------------------------------
+        // --------------------------------------------------
         // INSERT OR UPDATE MEAL
-        // ------------------------------------------
+        // --------------------------------------------------
 
         $stmt = $pdo->prepare("
             INSERT INTO daily_meals
-                (
-                    meal_group_id,
-                    user_id,
-                    meal_date,
-                    meal_amount
-                )
+            (
+                meal_group_id,
+                user_id,
+                meal_date,
+                meal_amount
+            )
             VALUES
-                (?, ?, ?, ?)
+            (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 meal_amount = VALUES(meal_amount)
         ");
@@ -277,20 +290,17 @@ if (
             $meal_amount
         ]);
 
-
         $message = "Meal updated successfully.";
 
-
-        // ------------------------------------------
+        // --------------------------------------------------
         // UPDATE LOCAL ARRAY
-        // ------------------------------------------
+        // --------------------------------------------------
 
         $meals[$member_id][$meal_date] = $meal_amount;
 
-
-        // ------------------------------------------
+        // --------------------------------------------------
         // AJAX RESPONSE
-        // ------------------------------------------
+        // --------------------------------------------------
 
         if (
             isset($_SERVER["HTTP_X_REQUESTED_WITH"]) &&
@@ -311,10 +321,9 @@ if (
         }
     }
 
-
-    // ----------------------------------------------
+    // --------------------------------------------------
     // AJAX ERROR RESPONSE
-    // ----------------------------------------------
+    // --------------------------------------------------
 
     if (
         isset($_SERVER["HTTP_X_REQUESTED_WITH"]) &&
@@ -331,7 +340,6 @@ if (
         exit;
     }
 }
-
 
 // --------------------------------------------------
 // FUNCTION TO GET MEAL VALUE
@@ -358,7 +366,6 @@ function getMealValue(
 ?>
 
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
@@ -457,7 +464,7 @@ function getMealValue(
         }
 
         .daily-day-column {
-            min-width: 55px;
+            min-width: 70px;
         }
 
         .daily-day-number {
@@ -492,7 +499,7 @@ function getMealValue(
         }
 
         .daily-meal-cell {
-            min-width: 55px;
+            min-width: 70px;
         }
 
         .daily-meal-form {
@@ -500,9 +507,13 @@ function getMealValue(
             padding: 0;
         }
 
-        .daily-meal-select {
-            width: 50px;
-            padding: 7px 4px;
+        /* ------------------------------------------
+           NEW MEAL INPUT
+        ------------------------------------------ */
+
+        .daily-meal-input {
+            width: 58px;
+            padding: 7px 5px;
             border: 1px solid #ddd;
             border-radius: 7px;
             background: white;
@@ -510,32 +521,35 @@ function getMealValue(
             font-size: 14px;
             text-align: center;
             cursor: pointer;
+            box-sizing: border-box;
         }
 
-        .daily-meal-select:focus {
+        .daily-meal-input:focus {
             outline: none;
             border-color: #7c3aed;
             box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
         }
 
-        .daily-meal-select.saving {
+        .daily-meal-input.saving {
             opacity: 0.6;
         }
 
-        .daily-meal-select.saved {
+        .daily-meal-input.saved {
             border-color: #22c55e;
         }
 
         .daily-readonly-meal {
             display: inline-flex;
-            width: 32px;
+            min-width: 40px;
             height: 32px;
+            padding: 0 5px;
             align-items: center;
             justify-content: center;
             border-radius: 7px;
             background: #f5f5f5;
             font-weight: 600;
             color: #555;
+            box-sizing: border-box;
         }
 
         .meal-save-status {
@@ -581,15 +595,17 @@ function getMealValue(
                 min-width: 140px;
             }
 
+            .daily-meal-input {
+                width: 58px;
+            }
+
         }
 
     </style>
 
 </head>
 
-
 <body>
-
 
 <!-- ==================================================
      SIDEBAR
@@ -678,7 +694,6 @@ function getMealValue(
 
 <div class="main">
 
-
     <!-- TOPBAR -->
 
     <div class="topbar">
@@ -700,9 +715,7 @@ function getMealValue(
             ?>
 
             <span>
-
                 ·
-
                 <?php
                 echo ucfirst(
                     str_replace(
@@ -712,7 +725,6 @@ function getMealValue(
                     )
                 );
                 ?>
-
             </span>
 
         </div>
@@ -750,7 +762,6 @@ function getMealValue(
 
             </div>
 
-
             <div>
 
                 <strong>
@@ -773,7 +784,6 @@ function getMealValue(
 
             </div>
 
-
             <div>
 
                 <strong>
@@ -788,7 +798,6 @@ function getMealValue(
                 Days
 
             </div>
-
 
             <div>
 
@@ -851,7 +860,6 @@ function getMealValue(
 
     <div class="card daily-meals-card">
 
-
         <div class="daily-meals-header">
 
             <div>
@@ -873,13 +881,10 @@ function getMealValue(
                 </h2>
 
                 <p class="page-description">
-
                     Record daily meals for all group members.
-
                 </p>
 
             </div>
-
 
             <div class="edit-status">
 
@@ -912,7 +917,6 @@ function getMealValue(
                             Member
                         </th>
 
-
                         <?php
 
                         for (
@@ -940,25 +944,16 @@ function getMealValue(
                             <th class="daily-day-column">
 
                                 <span class="daily-day-number">
-
-                                    <?php
-                                    echo $day;
-                                    ?>
-
+                                    <?php echo $day; ?>
                                 </span>
 
                                 <span class="daily-day-name">
-
-                                    <?php
-                                    echo $day_name;
-                                    ?>
-
+                                    <?php echo $day_name; ?>
                                 </span>
 
                             </th>
 
                         <?php endfor; ?>
-
 
                         <th class="daily-total-column">
                             Total
@@ -971,7 +966,6 @@ function getMealValue(
 
                 <tbody>
 
-
                     <?php foreach ($members as $member): ?>
 
                         <?php
@@ -980,9 +974,7 @@ function getMealValue(
 
                         ?>
 
-
                         <tr>
-
 
                             <!-- MEMBER -->
 
@@ -1032,30 +1024,35 @@ function getMealValue(
                                     $day
                                 );
 
-
                                 $meal_value = getMealValue(
                                     $meals,
                                     $member["id"],
                                     $date_string
                                 );
 
-
                                 $member_total +=
                                     (float) $meal_value;
 
                             ?>
 
-
                                 <td class="daily-meal-cell">
 
-
                                     <?php if ($can_edit): ?>
-
 
                                         <form
                                             method="POST"
                                             class="daily-meal-form"
                                         >
+
+                                            <input
+                                                type="hidden"
+                                                name="csrf_token"
+                                                value="<?php echo htmlspecialchars(
+                                                    csrf_token(),
+                                                    ENT_QUOTES,
+                                                    "UTF-8"
+                                                ); ?>"
+                                            >
 
                                             <input
                                                 type="hidden"
@@ -1069,76 +1066,64 @@ function getMealValue(
                                                 value="<?php echo $day; ?>"
                                             >
 
-
                                             <select
                                                 name="meal_amount"
-                                                class="daily-meal-select"
+                                                class="daily-meal-input"
                                                 data-user-id="<?php echo $member["id"]; ?>"
                                                 data-day="<?php echo $day; ?>"
                                             >
+                                                <?php
+                                                $allowed_meal_values = [
+                                                    "0",
+                                                    "0.5",
+                                                    "1",
+                                                    "1.5",
+                                                    "2",
+                                                    "2.5",
+                                                    "3"
+                                                ];
 
-
-                                                <option
-                                                    value="0"
-                                                    <?php
-                                                    echo ((float) $meal_value === 0.0)
-                                                        ? "selected"
-                                                        : "";
-                                                    ?>
-                                                >
-                                                    0
-                                                </option>
-
-
-                                                <option
-                                                    value="0.5"
-                                                    <?php
-                                                    echo ((float) $meal_value === 0.5)
-                                                        ? "selected"
-                                                        : "";
-                                                    ?>
-                                                >
-                                                    0.5
-                                                </option>
-
-
-                                                <option
-                                                    value="1"
-                                                    <?php
-                                                    echo ((float) $meal_value === 1.0)
-                                                        ? "selected"
-                                                        : "";
-                                                    ?>
-                                                >
-                                                    1
-                                                </option>
-
-
+                                                foreach ($allowed_meal_values as $allowed_value):
+                                                ?>
+                                                    <option
+                                                        value="<?php echo $allowed_value; ?>"
+                                                        <?php
+                                                        if ((float) $meal_value === (float) $allowed_value) {
+                                                            echo "selected";
+                                                        }
+                                                        ?>
+                                                    >
+                                                        <?php echo $allowed_value; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
                                             </select>
 
                                         </form>
 
-
                                     <?php else: ?>
-
 
                                         <span class="daily-readonly-meal">
 
                                             <?php
-                                            echo number_format(
-                                                (float) $meal_value,
-                                                1
+                                            echo rtrim(
+                                                rtrim(
+                                                    number_format(
+                                                        (float) $meal_value,
+                                                        2,
+                                                        ".",
+                                                        ""
+                                                    ),
+                                                    "0"
+                                                ),
+                                                "."
                                             );
                                             ?>
 
                                         </span>
 
-
                                     <?php endif; ?>
 
-
                                 </td>
-
 
                             <?php endfor; ?>
 
@@ -1152,7 +1137,7 @@ function getMealValue(
                                     <?php
                                     echo number_format(
                                         $member_total,
-                                        1
+                                        2
                                     );
                                     ?>
 
@@ -1160,12 +1145,9 @@ function getMealValue(
 
                             </td>
 
-
                         </tr>
 
-
                     <?php endforeach; ?>
-
 
                 </tbody>
 
@@ -1187,11 +1169,8 @@ function getMealValue(
             text-decoration:none;
         "
     >
-
         ← Back to Overview
-
     </a>
-
 
 </div>
 
@@ -1212,13 +1191,13 @@ function getMealValue(
 
 <script>
 
-document.querySelectorAll(".daily-meal-select").forEach(function(select) {
+document.querySelectorAll(".daily-meal-input").forEach(function(input) {
 
-    select.addEventListener("change", function() {
+    input.addEventListener("change", function() {
 
-        const mealSelect = this;
+        const mealInput = this;
 
-        const form = mealSelect.closest(".daily-meal-form");
+        const form = mealInput.closest(".daily-meal-form");
 
         const userId = form.querySelector(
             'input[name="user_id"]'
@@ -1228,23 +1207,30 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
             'input[name="day"]'
         ).value;
 
-        const mealAmount = mealSelect.value;
+        const csrfToken = form.querySelector(
+            'input[name="csrf_token"]'
+        ).value;
+
+        const mealAmount = mealInput.value;
 
         const status = document.getElementById(
             "mealSaveStatus"
         );
 
-
         // Show saving state
 
-        mealSelect.classList.add("saving");
+        mealInput.classList.add("saving");
 
-        mealSelect.disabled = true;
-
+        mealInput.disabled = true;
 
         // Create form data
 
         const formData = new FormData();
+
+        formData.append(
+            "csrf_token",
+            csrfToken
+        );
 
         formData.append(
             "user_id",
@@ -1260,7 +1246,6 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
             "meal_amount",
             mealAmount
         );
-
 
         // Save without reloading
 
@@ -1288,14 +1273,13 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
 
             if (data.success) {
 
-                mealSelect.classList.remove(
+                mealInput.classList.remove(
                     "saving"
                 );
 
-                mealSelect.classList.add(
+                mealInput.classList.add(
                     "saved"
                 );
-
 
                 status.textContent =
                     "✓ Meal saved";
@@ -1308,10 +1292,9 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
                     "show"
                 );
 
-
                 setTimeout(function() {
 
-                    mealSelect.classList.remove(
+                    mealInput.classList.remove(
                         "saved"
                     );
 
@@ -1339,7 +1322,11 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
             console.error(error);
 
             status.textContent =
-                "✕ Could not save meal";
+                "✕ " +
+                (
+                    error.message ||
+                    "Could not save meal"
+                );
 
             status.classList.add(
                 "error"
@@ -1349,22 +1336,21 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
                 "show"
             );
 
-
             setTimeout(function() {
 
                 status.classList.remove(
                     "show"
                 );
 
-            }, 2000);
+            }, 2500);
 
         })
 
         .finally(function() {
 
-            mealSelect.disabled = false;
+            mealInput.disabled = false;
 
-            mealSelect.classList.remove(
+            mealInput.classList.remove(
                 "saving"
             );
 
@@ -1376,7 +1362,5 @@ document.querySelectorAll(".daily-meal-select").forEach(function(select) {
 
 </script>
 
-
 </body>
-
 </html>

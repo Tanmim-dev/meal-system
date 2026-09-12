@@ -1,8 +1,9 @@
 [<?php
 
-session_start();
-
+require_once "../includes/auth.php";
 require_once "../config/database.php";
+
+require_login();
 
 
 /* -------------------------------------------------
@@ -95,6 +96,8 @@ if (
     isset($_POST["add_item"])
 ) {
 
+    verify_csrf();
+
     if (!$can_edit) {
 
         die(
@@ -175,6 +178,8 @@ if (
     isset($_POST["delete_item"])
 ) {
 
+    verify_csrf();
+
     if (!$can_delete) {
 
         die(
@@ -218,6 +223,8 @@ if (
     $_SERVER["REQUEST_METHOD"] === "POST" &&
     isset($_POST["edit_item"])
 ) {
+
+    verify_csrf();
 
     if (!$can_edit) {
 
@@ -618,6 +625,8 @@ foreach ($items as $item) {
 
             <form method="POST">
 
+                <?= csrf_field() ?>
+
 
                 <div class="form-grid">
 
@@ -971,6 +980,8 @@ foreach ($items as $item) {
                                                     );
                                                 "
                                             >
+
+                                                <?= csrf_field() ?>
 
 
                                                 <input

@@ -2,9 +2,8 @@
 
 date_default_timezone_set("Asia/Dhaka");
 
-session_start();
-
 require_once __DIR__ . "/config/database.php";
+require_once __DIR__ . "/includes/auth.php";
 
 $error = "";
 $success = false;
@@ -41,18 +40,23 @@ if ($token === "") {
 
     if (!$reset) {
 
-        $error = "This password reset link is invalid, expired, or has already been used.";
+        $error =
+            "This password reset link is invalid, expired, or has already been used.";
 
     } else {
 
         if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+            // CSRF protection
+            verify_csrf();
 
             $password = $_POST["password"] ?? "";
             $confirm_password = $_POST["confirm_password"] ?? "";
 
             if (strlen($password) < 8) {
 
-                $error = "Password must be at least 8 characters long.";
+                $error =
+                    "Password must be at least 8 characters long.";
 
             } elseif ($password !== $confirm_password) {
 
@@ -82,18 +86,30 @@ if ($token === "") {
                         $reset["user_id"]
                     ]);
 
-                    // Mark reset token as used
-                    $used = $pdo->prepare("
+                    /*
+                     * Invalidate ALL unused reset tokens
+                     * for this user.
+                     */
+                    $invalidate = $pdo->prepare("
                         UPDATE password_resets
                         SET used_at = NOW()
-                        WHERE id = ?
+                        WHERE user_id = ?
+                          AND used_at IS NULL
                     ");
 
-                    $used->execute([
-                        $reset["reset_id"]
+                    $invalidate->execute([
+                        $reset["user_id"]
                     ]);
 
                     $pdo->commit();
+
+                    /*
+                     * Do not automatically log the user in.
+                     * Regenerate the session after password reset.
+                     */
+                    $_SESSION = [];
+
+                    session_regenerate_id(true);
 
                     $success = true;
 
@@ -103,12 +119,14 @@ if ($token === "") {
                         $pdo->rollBack();
                     }
 
-                    $error = "Something went wrong. Please try again.";
+                    $error =
+                        "Something went wrong. Please try again.";
                 }
             }
         }
     }
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -314,6 +332,8 @@ if ($token === "") {
             </p>
 
             <form method="POST">
+
+                <?= csrf_field() ?>
 
                 <div class="form-group">
 

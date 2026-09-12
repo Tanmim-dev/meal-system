@@ -1,12 +1,14 @@
 <?php
 
-session_start();
-
-require_once "config/database.php";
+require_once __DIR__ . "/config/database.php";
+require_once __DIR__ . "/includes/auth.php";
 
 $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // CSRF protection
+    verify_csrf();
 
     $email = trim($_POST["email"] ?? "");
     $password = $_POST["password"] ?? "";
@@ -14,6 +16,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if (empty($email) || empty($password)) {
 
         $message = "Please fill in all fields.";
+
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
+        $message = "Please enter a valid email address.";
 
     } else {
 
@@ -28,20 +34,66 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && password_verify($password, $user["password"])) {
+        if (
+            $user &&
+            password_verify(
+                $password,
+                $user["password"]
+            )
+        ) {
 
-            // Store user information in session
-            $_SESSION["user_id"] = $user["id"];
-            $_SESSION["user_name"] = $user["name"];
-            $_SESSION["user_email"] = $user["email"];
+            /*
+            ==========================================
+            PREVENT SESSION FIXATION
+            ==========================================
+            */
 
-            // Go to dashboard
+            session_regenerate_id(true);
+
+            /*
+            ==========================================
+            CLEAR OLD AUTH DATA
+            ==========================================
+            */
+
+            unset(
+                $_SESSION["user_id"],
+                $_SESSION["user_name"],
+                $_SESSION["user_email"]
+            );
+
+            /*
+            ==========================================
+            STORE AUTHENTICATED USER
+            ==========================================
+            */
+
+            $_SESSION["user_id"] =
+                (int) $user["id"];
+
+            $_SESSION["user_name"] =
+                $user["name"];
+
+            $_SESSION["user_email"] =
+                $user["email"];
+
+            $_SESSION["login_time"] =
+                time();
+
+            /*
+            ==========================================
+            GO TO DASHBOARD
+            ==========================================
+            */
+
             header("Location: dashboard/index.php");
             exit;
 
         } else {
 
-            $message = "Invalid email or password.";
+            // Do not reveal whether the email exists
+            $message =
+                "Invalid email or password.";
         }
     }
 }
@@ -214,12 +266,18 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         <?php if ($message): ?>
 
             <div class="error-message">
-                <?= htmlspecialchars($message) ?>
+                <?= htmlspecialchars(
+                    $message,
+                    ENT_QUOTES,
+                    "UTF-8"
+                ) ?>
             </div>
 
         <?php endif; ?>
 
         <form method="POST">
+
+            <?= csrf_field() ?>
 
             <div class="form-group">
 
@@ -232,7 +290,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     id="email"
                     name="email"
                     placeholder="Enter your email"
-                    value="<?= htmlspecialchars($_POST["email"] ?? "") ?>"
+                    value="<?= htmlspecialchars(
+                        $_POST["email"] ?? "",
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>"
                     required
                 >
 
@@ -255,12 +317,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
             <div class="forgot-password">
+
                 <a href="forgot_password.php">
                     Forgot Password?
                 </a>
+
             </div>
 
-            <button type="submit" class="login-btn">
+            <button
+                type="submit"
+                class="login-btn"
+            >
                 Login
             </button>
 

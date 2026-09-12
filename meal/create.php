@@ -1,53 +1,99 @@
 <?php
 
-session_start();
-
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-// Make sure user is logged in
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $message = "";
 $success = false;
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
+    verify_csrf();
+
     $meal_name = trim($_POST["meal_name"] ?? "");
     $month_name = trim($_POST["month_name"] ?? "");
     $year = (int) ($_POST["year"] ?? 0);
 
-    if (empty($meal_name) || empty($month_name) || empty($year)) {
+    /*
+     * Server-side validation
+     */
+
+    if (
+        empty($meal_name) ||
+        empty($month_name) ||
+        empty($year)
+    ) {
 
         $message = "Please fill in all fields.";
+
+    } elseif (
+        strlen($meal_name) < 2 ||
+        strlen($meal_name) > 100
+    ) {
+
+        $message = "Meal name must be between 2 and 100 characters.";
+
+    } elseif (
+        strlen($month_name) < 2 ||
+        strlen($month_name) > 30
+    ) {
+
+        $message = "Month name must be between 2 and 30 characters.";
+
+    } elseif (
+        $year < 2000 ||
+        $year > 2100
+    ) {
+
+        $message = "Please enter a valid year between 2000 and 2100.";
 
     } else {
 
         try {
 
-            // Generate a unique join code
+            /*
+             * Generate a unique join code
+             */
+
             do {
+
                 $join_code = "MEAL-" . strtoupper(
                     substr(bin2hex(random_bytes(4)), 0, 6)
                 );
 
                 $check = $pdo->prepare(
-                    "SELECT id FROM meal_groups WHERE join_code = ?"
+                    "SELECT id
+                     FROM meal_groups
+                     WHERE join_code = ?"
                 );
 
                 $check->execute([$join_code]);
 
             } while ($check->fetch());
 
-            // Start database transaction
+
+            /*
+             * Start transaction
+             */
+
             $pdo->beginTransaction();
 
-            // Create meal group
+
+            /*
+             * Create meal group
+             */
+
             $stmt = $pdo->prepare(
                 "INSERT INTO meal_groups
-                (name, join_code, month_name, year, created_by)
+                (
+                    name,
+                    join_code,
+                    month_name,
+                    year,
+                    created_by
+                )
                 VALUES (?, ?, ?, ?, ?)"
             );
 
@@ -59,13 +105,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $_SESSION["user_id"]
             ]);
 
-            // Get newly created meal ID
+
+            /*
+             * Get newly created group ID
+             */
+
             $meal_group_id = $pdo->lastInsertId();
 
-            // Add creator as Manager
+
+            /*
+             * Add creator as Manager
+             */
+
             $stmt = $pdo->prepare(
                 "INSERT INTO meal_members
-                (meal_group_id, user_id, role)
+                (
+                    meal_group_id,
+                    user_id,
+                    role
+                )
                 VALUES (?, ?, 'manager')"
             );
 
@@ -74,7 +132,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $_SESSION["user_id"]
             ]);
 
-            // Save everything
+
+            /*
+             * Save everything
+             */
+
             $pdo->commit();
 
             $message = "Meal created successfully!";
@@ -123,37 +185,50 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         🍽️ Meal System
     </div>
 
+
     <?php if ($success): ?>
 
         <!-- Success Message -->
+
         <div class="success-box">
 
             <div class="success-icon">
                 ✓
             </div>
 
-            <h2>Meal Created Successfully!</h2>
+            <h2>
+                Meal Created Successfully!
+            </h2>
 
             <p>
                 Your meal group has been created.
             </p>
 
+
             <div class="join-code-box">
 
-                <span>Your Join Code</span>
+                <span>
+                    Your Join Code
+                </span>
 
                 <strong>
-                    <?php echo htmlspecialchars($join_code); ?>
+                    <?= htmlspecialchars(
+                        $join_code,
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>
                 </strong>
 
             </div>
 
+
             <a
-                href="../dashboard/meal.php?id=<?php echo $meal_group_id; ?>"
+                href="../dashboard/meal.php?id=<?= (int) $meal_group_id ?>"
                 class="auth-btn"
             >
                 Open Meal
             </a>
+
 
             <a
                 href="../dashboard/index.php"
@@ -164,29 +239,44 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         </div>
 
+
     <?php else: ?>
 
         <!-- Heading -->
-        <h1>Create New Meal</h1>
+
+        <h1>
+            Create New Meal
+        </h1>
 
         <p class="auth-subtitle">
             Create a meal group and become its Manager.
         </p>
 
+
         <!-- Error -->
+
         <?php if ($message): ?>
 
             <div class="error-box">
-                <?php echo htmlspecialchars($message); ?>
+                <?= htmlspecialchars(
+                    $message,
+                    ENT_QUOTES,
+                    "UTF-8"
+                ) ?>
             </div>
 
         <?php endif; ?>
 
 
         <!-- Form -->
+
         <form method="POST">
 
+            <?= csrf_field() ?>
+
+
             <!-- Meal Name -->
+
             <div class="form-group">
 
                 <label for="meal_name">
@@ -198,7 +288,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     id="meal_name"
                     name="meal_name"
                     placeholder="Example: Abdullah's Mess"
-                    value="<?php echo htmlspecialchars($_POST["meal_name"] ?? ""); ?>"
+                    value="<?= htmlspecialchars(
+                        $_POST["meal_name"] ?? "",
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>"
+                    maxlength="100"
                     required
                 >
 
@@ -206,6 +301,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
             <!-- Month -->
+
             <div class="form-group">
 
                 <label for="month_name">
@@ -217,7 +313,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     id="month_name"
                     name="month_name"
                     placeholder="Example: September"
-                    value="<?php echo htmlspecialchars($_POST["month_name"] ?? ""); ?>"
+                    value="<?= htmlspecialchars(
+                        $_POST["month_name"] ?? "",
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>"
+                    maxlength="30"
                     required
                 >
 
@@ -225,6 +326,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
             <!-- Year -->
+
             <div class="form-group">
 
                 <label for="year">
@@ -235,7 +337,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     type="number"
                     id="year"
                     name="year"
-                    value="<?php echo htmlspecialchars($_POST["year"] ?? date("Y")); ?>"
+                    value="<?= htmlspecialchars(
+                        $_POST["year"] ?? date("Y"),
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>"
                     min="2000"
                     max="2100"
                     required
@@ -245,6 +351,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
             <!-- Submit -->
+
             <button
                 type="submit"
                 class="auth-btn"
@@ -256,6 +363,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
         <!-- Back -->
+
         <a
             href="../dashboard/index.php"
             class="back-link"
@@ -286,6 +394,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 .success-icon {
     width: 60px;
     height: 60px;
+
     margin: 0 auto 15px;
 
     display: flex;
@@ -404,7 +513,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 .form-group input:focus {
     border-color: #7c3aed;
 
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+    box-shadow:
+        0 0 0 3px
+        rgba(124, 58, 237, 0.1);
 }
 
 

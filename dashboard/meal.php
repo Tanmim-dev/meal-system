@@ -1,16 +1,9 @@
 <?php
 
-session_start();
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-// --------------------------------------------------
-// CHECK LOGIN
-// --------------------------------------------------
-
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $user_id = $_SESSION["user_id"];
 
@@ -82,6 +75,9 @@ if (
     isset($_POST["add_announcement"])
 ) {
 
+    // CSRF protection
+    verify_csrf();
+
     if (!$can_edit_announcement) {
         die("You do not have permission to add announcements.");
     }
@@ -91,6 +87,10 @@ if (
 
     if ($title === "" || $message === "") {
         die("Please fill in all announcement fields.");
+    }
+
+    if (strlen($title) > 255) {
+        die("Announcement title is too long.");
     }
 
     $stmt = $pdo->prepare("
@@ -125,6 +125,9 @@ if (
     isset($_POST["edit_announcement"])
 ) {
 
+    // CSRF protection
+    verify_csrf();
+
     if (!$can_edit_announcement) {
         die("You do not have permission to edit announcements.");
     }
@@ -144,6 +147,10 @@ if (
         $message === ""
     ) {
         die("Please fill in all announcement fields.");
+    }
+
+    if (strlen($title) > 255) {
+        die("Announcement title is too long.");
     }
 
     $stmt = $pdo->prepare("
@@ -176,12 +183,19 @@ if (
     isset($_POST["delete_announcement"])
 ) {
 
+    // CSRF protection
+    verify_csrf();
+
     if (!$can_delete_announcement) {
         die("Only the Manager can delete announcements.");
     }
 
     $announcement_id =
         (int) ($_POST["announcement_id"] ?? 0);
+
+    if ($announcement_id <= 0) {
+        die("Invalid announcement.");
+    }
 
     $stmt = $pdo->prepare("
         DELETE FROM announcements
@@ -275,7 +289,6 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
         Overview - <?php echo htmlspecialchars($meal["name"]); ?>
     </title>
 
-    <!-- SAME GLOBAL DESIGN AS MARKET + PAYMENTS -->
     <link
         rel="stylesheet"
         href="../css/style.css"
@@ -434,7 +447,6 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <div class="topbar">
 
-
         <div>
 
             <h1>
@@ -453,6 +465,7 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
             ); ?>
 
             <span>
+
                 (
                 <?php echo ucfirst(
                     str_replace(
@@ -462,10 +475,10 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     )
                 ); ?>
                 )
+
             </span>
 
         </div>
-
 
     </div>
 
@@ -476,7 +489,6 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
     ================================================== -->
 
     <div class="card">
-
 
         <h2>
 
@@ -499,6 +511,7 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <br>
 
                 <?php
+
                 echo htmlspecialchars(
                     $meal["month_name"]
                 );
@@ -508,6 +521,7 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 echo htmlspecialchars(
                     $meal["year"]
                 );
+
                 ?>
 
             </div>
@@ -567,7 +581,6 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
         </div>
-
 
     </div>
 
@@ -645,6 +658,8 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         margin-top:20px;
                     "
                 >
+
+                    <?= csrf_field() ?>
 
 
                     <h3>
@@ -853,6 +868,8 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     "
                                 >
 
+                                    <?= csrf_field() ?>
+
 
                                     <input
                                         type="hidden"
@@ -935,6 +952,8 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         );
                                     "
                                 >
+
+                                    <?= csrf_field() ?>
 
 
                                     <input
@@ -1166,34 +1185,93 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     ): ?>
 
 
-                                        <a
-                                            href="../meal/promote_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                            class="action-btn edit-btn"
-                                            onclick="
+                                        <!-- =================================
+                                             PROMOTE MEMBER
+                                        ================================== -->
+
+                                        <form
+                                            method="POST"
+                                            action="../meal/promote_member.php"
+                                            style="display:inline;"
+                                            onsubmit="
                                                 return confirm(
                                                     'Promote this member to Junior Manager?'
                                                 );
                                             "
                                         >
 
-                                            Promote
-
-                                        </a>
+                                            <?= csrf_field() ?>
 
 
-                                        <a
-                                            href="../meal/remove_member.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                            class="action-btn delete-btn"
-                                            onclick="
+                                            <input
+                                                type="hidden"
+                                                name="meal_id"
+                                                value="<?php echo $meal_id; ?>"
+                                            >
+
+
+                                            <input
+                                                type="hidden"
+                                                name="user_id"
+                                                value="<?php echo $member["id"]; ?>"
+                                            >
+
+
+                                            <button
+                                                type="submit"
+                                                class="action-btn edit-btn"
+                                            >
+
+                                                Promote
+
+                                            </button>
+
+                                        </form>
+
+
+
+                                        <!-- =================================
+                                             REMOVE MEMBER
+                                        ================================== -->
+
+                                        <form
+                                            method="POST"
+                                            action="../meal/remove_member.php"
+                                            style="display:inline;"
+                                            onsubmit="
                                                 return confirm(
                                                     'Are you sure you want to remove this member?'
                                                 );
                                             "
                                         >
 
-                                            Remove
+                                            <?= csrf_field() ?>
 
-                                        </a>
+
+                                            <input
+                                                type="hidden"
+                                                name="meal_id"
+                                                value="<?php echo $meal_id; ?>"
+                                            >
+
+
+                                            <input
+                                                type="hidden"
+                                                name="user_id"
+                                                value="<?php echo $member["id"]; ?>"
+                                            >
+
+
+                                            <button
+                                                type="submit"
+                                                class="action-btn delete-btn"
+                                            >
+
+                                                Remove
+
+                                            </button>
+
+                                        </form>
 
 
                                     <?php elseif (
@@ -1201,19 +1279,48 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     ): ?>
 
 
-                                        <a
-                                            href="../meal/remove_junior_manager.php?meal_id=<?php echo $meal_id; ?>&user_id=<?php echo $member["id"]; ?>"
-                                            class="action-btn delete-btn"
-                                            onclick="
+                                        <!-- =================================
+                                             REMOVE JUNIOR MANAGER ROLE
+                                        ================================== -->
+
+                                        <form
+                                            method="POST"
+                                            action="../meal/remove_junior_manager.php"
+                                            style="display:inline;"
+                                            onsubmit="
                                                 return confirm(
                                                     'Remove Junior Manager role from this member?'
                                                 );
                                             "
                                         >
 
-                                            Remove Junior Manager
+                                            <?= csrf_field() ?>
 
-                                        </a>
+
+                                            <input
+                                                type="hidden"
+                                                name="meal_id"
+                                                value="<?php echo $meal_id; ?>"
+                                            >
+
+
+                                            <input
+                                                type="hidden"
+                                                name="user_id"
+                                                value="<?php echo $member["id"]; ?>"
+                                            >
+
+
+                                            <button
+                                                type="submit"
+                                                class="action-btn delete-btn"
+                                            >
+
+                                                Remove Junior Manager
+
+                                            </button>
+
+                                        </form>
 
 
                                     <?php else: ?>
@@ -1248,7 +1355,74 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
 
+<!-- ==================================================
+     DANGER ZONE
+================================================== -->
 
+<?php if ($current_role === "manager"): ?>
+
+    <div
+        class="card"
+        style="
+            margin-top:30px;
+            border:2px solid #fecaca;
+            background:#fffafa;
+        "
+    >
+
+        <h2 style="color:#dc2626;">
+            ⚠️ Danger Zone
+        </h2>
+
+        <p
+            style="
+                color:#666;
+                line-height:1.6;
+            "
+        >
+            Permanently delete this entire meal group and
+            all of its data.
+        </p>
+
+        <button
+            type="button"
+            class="action-btn delete-btn"
+            onclick="confirmDeleteFullMeal()"
+        >
+
+            🗑️ Delete Full Meal
+
+        </button>
+
+    </div>
+
+
+    <!-- Hidden Delete Form -->
+
+    <form
+        id="deleteFullMealForm"
+        method="POST"
+        action="../meal/delete.php"
+        style="display:none;"
+    >
+
+        <?= csrf_field() ?>
+
+        <input
+            type="hidden"
+            name="meal_id"
+            value="<?php echo $meal_id; ?>"
+        >
+
+        <input
+            type="hidden"
+            name="confirm_name"
+            id="deleteConfirmName"
+        >
+
+    </form>
+
+<?php endif; ?>
     <!-- ==================================================
          BACK
     ================================================== -->
@@ -1284,8 +1458,10 @@ function toggleAnnouncementForm() {
     const form =
         document.getElementById("announcementForm");
 
-    if (form.style.display === "none" ||
-        form.style.display === "") {
+    if (
+        form.style.display === "none" ||
+        form.style.display === ""
+    ) {
 
         form.style.display = "block";
 
@@ -1294,6 +1470,105 @@ function toggleAnnouncementForm() {
         form.style.display = "none";
 
     }
+
+}
+
+
+function confirmDeleteFullMeal() {
+
+    const mealName = <?php echo json_encode($meal["name"]); ?>;
+
+
+    // =============================================
+    // WARNING 1
+    // =============================================
+
+    const firstWarning = confirm(
+
+        "⚠️ WARNING 1\n\n" +
+
+        "You are about to delete the entire meal group:\n\n" +
+
+        mealName + "\n\n" +
+
+        "This will permanently delete:\n" +
+
+        "• All members\n" +
+        "• Daily meals\n" +
+        "• Market / Bazar records\n" +
+        "• Given Money\n" +
+        "• Expenses\n" +
+        "• Announcements\n\n" +
+
+        "This action cannot be undone.\n\n" +
+
+        "Do you want to continue?"
+
+    );
+
+
+    if (!firstWarning) {
+        return;
+    }
+
+
+    // =============================================
+    // WARNING 2
+    // =============================================
+
+    const typedName = prompt(
+
+        "🚨 FINAL WARNING\n\n" +
+
+        "This is your second and final warning.\n\n" +
+
+        "You are permanently deleting:\n\n" +
+
+        mealName + "\n\n" +
+
+        "To confirm, type the exact meal name:"
+
+    );
+
+
+    if (typedName === null) {
+        return;
+    }
+
+
+    // =============================================
+    // CHECK NAME
+    // =============================================
+
+    if (typedName !== mealName) {
+
+        alert(
+
+            "❌ The meal name does not match.\n\n" +
+            "The meal was NOT deleted."
+
+        );
+
+        return;
+    }
+
+
+    // =============================================
+    // SEND CONFIRMATION TO FORM
+    // =============================================
+
+    document.getElementById(
+        "deleteConfirmName"
+    ).value = typedName;
+
+
+    // =============================================
+    // SUBMIT FORM
+    // =============================================
+
+    document.getElementById(
+        "deleteFullMealForm"
+    ).submit();
 
 }
 

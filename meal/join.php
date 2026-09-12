@@ -1,20 +1,19 @@
 <?php
 
-session_start();
-
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-// Make sure user is logged in
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $message = "";
 $success = false;
 $joined_meal_id = null;
+$meal = null;
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // Verify CSRF token
+    verify_csrf();
 
     $join_code = strtoupper(trim($_POST["join_code"] ?? ""));
 
@@ -26,7 +25,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         // Find the meal group
         $stmt = $pdo->prepare(
-            "SELECT id, name FROM meal_groups WHERE join_code = ?"
+            "SELECT id, name
+             FROM meal_groups
+             WHERE join_code = ?"
         );
 
         $stmt->execute([$join_code]);
@@ -41,8 +42,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             // Check whether user is already a member
             $stmt = $pdo->prepare(
-                "SELECT id FROM meal_members
-                 WHERE meal_group_id = ? AND user_id = ?"
+                "SELECT id
+                 FROM meal_members
+                 WHERE meal_group_id = ?
+                 AND user_id = ?"
             );
 
             $stmt->execute([
@@ -165,6 +168,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <!-- Form -->
         <form method="POST">
+
+            <?= csrf_field() ?>
 
             <div class="form-group">
 

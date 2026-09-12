@@ -1,13 +1,9 @@
 <?php
 
-session_start();
-
+require_once "../includes/auth.php";
 require_once "../config/database.php";
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: ../login.php");
-    exit;
-}
+require_login();
 
 $user_id = $_SESSION["user_id"];
 
@@ -19,6 +15,7 @@ $group_id = (int) $_GET["id"];
 
 $message = "";
 $error = "";
+
 
 /* =========================================================
    GET GROUP + CURRENT USER ROLE
@@ -58,6 +55,9 @@ $can_delete = ($role === "manager");
 ========================================================= */
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    /* CSRF SECURITY */
+    verify_csrf();
 
     $action = $_POST["action"] ?? "";
 
@@ -117,7 +117,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             } catch (PDOException $e) {
 
-                $error = "Failed to add expense: " . $e->getMessage();
+                $error = "Failed to add expense. Please try again.";
             }
         }
     }
@@ -179,7 +179,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             } catch (PDOException $e) {
 
-                $error = "Failed to update expense: " . $e->getMessage();
+                $error = "Failed to update expense. Please try again.";
             }
         }
     }
@@ -217,7 +217,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             } catch (PDOException $e) {
 
-                $error = "Failed to delete expense: " . $e->getMessage();
+                $error = "Failed to delete expense. Please try again.";
             }
         }
     }
@@ -300,7 +300,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             } catch (PDOException $e) {
 
-                $error = "Failed to update individual Others: " . $e->getMessage();
+                $error = "Failed to update individual Others. Please try again.";
             }
         }
     }
@@ -577,7 +577,10 @@ function role_name($role)
 
     <meta charset="UTF-8">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>
         Calculation - <?= htmlspecialchars($group["name"]) ?>
@@ -848,6 +851,8 @@ function role_name($role)
 
 
             <form method="POST">
+
+                <?= csrf_field() ?>
 
                 <input
                     type="hidden"
@@ -1231,6 +1236,8 @@ function role_name($role)
 
                                             <form method="POST">
 
+                                                <?= csrf_field() ?>
+
                                                 <input
                                                     type="hidden"
                                                     name="action"
@@ -1352,6 +1359,8 @@ function role_name($role)
                                                     method="POST"
                                                     onsubmit="return confirm('Delete this shared expense?');"
                                                 >
+
+                                                    <?= csrf_field() ?>
 
                                                     <input
                                                         type="hidden"
@@ -1717,6 +1726,8 @@ function role_name($role)
                                     <div class="edit-box">
 
                                         <form method="POST">
+
+                                            <?= csrf_field() ?>
 
                                             <input
                                                 type="hidden"
